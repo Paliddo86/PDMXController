@@ -32,6 +32,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isControllerConnected = MutableStateFlow(false)
     val isControllerConnected: StateFlow<Boolean> = _isControllerConnected.asStateFlow()
 
+    private val _controllerDetails = MutableStateFlow<ControllerInfo?>(null)
+    val controllerDetails: StateFlow<ControllerInfo?> = _controllerDetails.asStateFlow()
+
     private val _currentShow = MutableStateFlow(Showfile("Default_Show"))
     val currentShow: StateFlow<Showfile> = _currentShow.asStateFlow()
 
@@ -61,6 +64,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _availableShows = MutableStateFlow<List<String>>(emptyList())
     val availableShows: StateFlow<List<String>> = _availableShows.asStateFlow()
 
+    // Configurazione Rete
+    private val _networkSettings = MutableStateFlow(NetworkSettings())
+    val networkSettings: StateFlow<NetworkSettings> = _networkSettings.asStateFlow()
+
     // Libreria Profili Utente Globali (Richiesta per le nuove implementazioni)
     private val _userFixtureProfiles = MutableStateFlow<List<FixtureProfile>>(emptyList())
     val userFixtureProfiles: StateFlow<List<FixtureProfile>> = _userFixtureProfiles.asStateFlow()
@@ -84,20 +91,51 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val activeService = binder.getService()
             artNetService = activeService
             isBound = true
+            
+            // Applichiamo le impostazioni attuali appena ci connettiamo al servizio
+            val s = _networkSettings.value
+            activeService.updateSettings(s.ipAddress, s.port, s.universe, s.autoConnect)
+            
             _dmxState.value = activeService.dmxData.clone()
             serviceConnectionJob?.cancel()
-            serviceConnectionJob = viewModelScope.launch { activeService.isControllerAlive.collect { _isControllerConnected.value = it } }
+            serviceConnectionJob = viewModelScope.launch {
+                launch { activeService.isControllerAlive.collect { _isControllerConnected.value = it } }
+                launch { activeService.controllerInfo.collect { _controllerDetails.value = it } }
+            }
         }
         override fun onServiceDisconnected(name: ComponentName?) { artNetService = null; isBound = false; _isControllerConnected.value = false }
     }
 
     init {
+        loadNetworkSettings()
         val intent = Intent(application, ArtNetForegroundService::class.java)
         application.startService(intent)
         application.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
         refreshShowList()
         val salvati = repository.getAvailableShows()
         if (salvati.isNotEmpty()) loadShow(salvati.first()) else createNewShow("Default_Show")
+    }
+
+    private fun loadNetworkSettings() {
+        val prefs = getApplication<Application>().getSharedPreferences("pdmx_prefs", Context.MODE_PRIVATE)
+        val ip = prefs.getString("ip", "192.168.4.1") ?: "192.168.4.1"
+        val port = prefs.getInt("port", 6454)
+        val uni = prefs.getInt("universe", 0)
+        val auto = prefs.getBoolean("auto_connect", true)
+        _networkSettings.value = NetworkSettings(ip, port, uni, auto)
+    }
+
+    fun updateNetworkSettings(newSettings: NetworkSettings) {
+        _networkSettings.value = newSettings
+        val prefs = getApplication<Application>().getSharedPreferences("pdmx_prefs", Context.MODE_PRIVATE)
+        prefs.edit().apply {
+            putString("ip", newSettings.ipAddress)
+            putInt("port", newSettings.port)
+            putInt("universe", newSettings.universe)
+            putBoolean("auto_connect", newSettings.autoConnect)
+            apply()
+        }
+        artNetService?.updateSettings(newSettings.ipAddress, newSettings.port, newSettings.universe, newSettings.autoConnect)
     }
 
     fun toggleLiveMode() { _isLiveMode.value = !_isLiveMode.value }

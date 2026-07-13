@@ -89,3 +89,20 @@ data class Showfile(
     val fixtureGroups: List<FixtureGroup> = emptyList(),
     val scenes: List<Scene> = listOf(Scene("Scena Principale"))
 )
+
+@Serializable
+data class NetworkSettings(
+    val ipAddress: String = "192.168.4.1",
+    val port: Int = 6454,
+    val universe: Int = 0,
+    val autoConnect: Boolean = true
+)
+
+@Serializable
+data class ControllerInfo(
+    val shortName: String = "",
+    val longName: String = "",
+    val ipAddress: String = "",
+    val firmwareVersion: String = "",
+    val status: String = ""
+)

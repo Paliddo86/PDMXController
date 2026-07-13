@@ -139,6 +139,7 @@ class ShowRepository(private val context: Context) {
                             val rObj = jsonPres.getJSONObject(k)
                             preList.add(DmxValueRange(rObj.getInt("from"), rObj.getInt("to"), rObj.getString("label")))
                         }
+                        
                         val typeStr = if (cObj.has("type")) cObj.getString("type") else ChannelType.OTHER.name
                         val type = try { ChannelType.valueOf(typeStr) } catch (e: Exception) { ChannelType.OTHER }
                         
@@ -210,5 +211,19 @@ class ShowRepository(private val context: Context) {
         val dir = context.filesDir
         return dir.listFiles { _, name -> name.endsWith(".json") }
             ?.map { it.name.substringBefore(".json") } ?: emptyList()
+    }
+
+    fun deleteShowfile(showName: String): Boolean {
+        return try {
+            val file = File(context.filesDir, "$showName.json")
+            if (file.exists()) {
+                file.delete()
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            Log.e("ShowRepository", "Errore eliminazione showfile", e)
+            false
+        }
     }
 }

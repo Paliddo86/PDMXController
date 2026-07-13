@@ -223,6 +223,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         repository.saveShowfile(updatedShow)
     }
 
+    fun deleteScene(index: Int) {
+        val show = _currentShow.value
+        if (show.scenes.size <= 1) return // Non eliminare l'ultima scena
+
+        val updatedScenes = show.scenes.toMutableList().apply { removeAt(index) }
+        val updatedShow = show.copy(scenes = updatedScenes)
+        
+        // Se la scena eliminata era quella attiva, resettiamo l'indice
+        if (_activeSceneIndex.value >= updatedScenes.size) {
+            _activeSceneIndex.value = updatedScenes.size - 1
+        } else if (_activeSceneIndex.value == index) {
+            _activeSceneIndex.value = 0
+        } else if (_activeSceneIndex.value > index) {
+            _activeSceneIndex.value -= 1
+        }
+        
+        _currentCueIndex.value = -1
+        _runningCueIndex.value = -1
+        stopSequence()
+
+        _currentShow.value = updatedShow
+        repository.saveShowfile(updatedShow)
+    }
+
     fun selectScene(index: Int) { _activeSceneIndex.value = index; _currentCueIndex.value = -1; stopSequence() }
 
     fun createNewScene(name: String) {
@@ -289,7 +313,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _currentShow.value = it
             _activeSceneIndex.value = 0
             _currentCueIndex.value = -1
+            _runningCueIndex.value = -1
             updateDimmerMap()
+        }
+    }
+
+    fun deleteShow(showName: String) {
+        if (repository.deleteShowfile(showName)) {
+            refreshShowList()
+            // Se abbiamo eliminato lo show corrente, carichiamo il primo disponibile o ne creiamo uno nuovo
+            if (_currentShow.value.showName == showName) {
+                val nextShow = availableShows.value.firstOrNull()
+                if (nextShow != null) loadShow(nextShow) else createNewShow("Default_Show")
+            }
         }
     }
 

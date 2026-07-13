@@ -67,6 +67,12 @@ fun FaderScreen(viewModel: MainViewModel) {
     var groupDialogOpened by remember { mutableStateOf(false) }
     var confirmDeleteGroupDialogOpened by remember { mutableStateOf(false) }
 
+    // Nuovi stati per gestione Show/Scene
+    var createShowDialogOpened by remember { mutableStateOf(false) }
+    var createSceneDialogOpened by remember { mutableStateOf(false) }
+    var showToDelete by remember { mutableStateOf<String?>(null) }
+    var sceneToDeleteIndex by remember { mutableStateOf<Int?>(null) }
+
     // Input Dialog Patch
     var newFixtureNameInput by remember { mutableStateOf("") }
     var newFixtureAddressInput by remember { mutableStateOf("1") }
@@ -231,7 +237,21 @@ fun FaderScreen(viewModel: MainViewModel) {
                     ) {
                         availableShows.forEach { showName ->
                             DropdownMenuItem(
-                                text = { Text(showName, color = colorTextPrimary) },
+                                text = { 
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                        Text(showName, color = colorTextPrimary, modifier = Modifier.weight(1f))
+                                        if (showName != "Default_Show") {
+                                            Text(
+                                                "🗑", 
+                                                color = colorDisconnected, 
+                                                modifier = Modifier.clickable { 
+                                                    showToDelete = showName
+                                                    showMenuExpanded = false 
+                                                }.padding(8.dp)
+                                            )
+                                        }
+                                    }
+                                },
                                 onClick = {
                                     viewModel.loadShow(showName)
                                     showMenuExpanded = false
@@ -589,7 +609,21 @@ fun FaderScreen(viewModel: MainViewModel) {
                                 ) {
                                     currentShow.scenes.forEachIndexed { idx, scene ->
                                         DropdownMenuItem(
-                                            text = { Text(scene.name, color = colorTextPrimary) },
+                                            text = { 
+                                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                                    Text(scene.name, color = colorTextPrimary, modifier = Modifier.weight(1f))
+                                                    if (currentShow.scenes.size > 1) {
+                                                        Text(
+                                                            "🗑", 
+                                                            color = colorDisconnected, 
+                                                            modifier = Modifier.clickable { 
+                                                                sceneToDeleteIndex = idx
+                                                                sceneMenuExpanded = false 
+                                                            }.padding(8.dp)
+                                                        )
+                                                    }
+                                                }
+                                            },
                                             onClick = {
                                                 viewModel.selectScene(idx)
                                                 sceneMenuExpanded = false
@@ -856,6 +890,59 @@ fun FaderScreen(viewModel: MainViewModel) {
                 createSceneDialogOpened = false
             },
             onDismiss = { createSceneDialogOpened = false }
+        )
+    }
+
+    // --- DIALOG CONFERMA ELIMINAZIONE SHOW ---
+    if (showToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { showToDelete = null },
+            containerColor = colorSurface,
+            title = { Text("ELIMINA SHOWFILE", color = colorDisconnected) },
+            text = { Text("Sei sicuro di voler eliminare lo show '${showToDelete}'? L'operazione non è reversibile.", color = colorTextPrimary) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showToDelete?.let { viewModel.deleteShow(it) }
+                        showToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = colorDisconnected)
+                ) {
+                    Text("ELIMINA", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showToDelete = null }) {
+                    Text("ANNULLA", color = colorTextPrimary)
+                }
+            }
+        )
+    }
+
+    // --- DIALOG CONFERMA ELIMINAZIONE SCENA ---
+    if (sceneToDeleteIndex != null) {
+        val sceneName = sceneToDeleteIndex?.let { currentShow.scenes.getOrNull(it)?.name } ?: ""
+        AlertDialog(
+            onDismissRequest = { sceneToDeleteIndex = null },
+            containerColor = colorSurface,
+            title = { Text("ELIMINA SCENA", color = colorDisconnected) },
+            text = { Text("Sei sicuro di voler eliminare la scena '$sceneName'? Tutte le cue contenute andranno perse.", color = colorTextPrimary) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        sceneToDeleteIndex?.let { viewModel.deleteScene(it) }
+                        sceneToDeleteIndex = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = colorDisconnected)
+                ) {
+                    Text("ELIMINA", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { sceneToDeleteIndex = null }) {
+                    Text("ANNULLA", color = colorTextPrimary)
+                }
+            }
         )
     }
 }

@@ -38,8 +38,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _activeSceneIndex = MutableStateFlow(0)
     val activeSceneIndex: StateFlow<Int> = _activeSceneIndex.asStateFlow()
 
-    private val _currentCueIndex = MutableStateFlow(-1)
+    private val _currentCueIndex = MutableStateFlow(-1) // Questo sarà il "Next" o "Selezionato"
     val currentCueIndex: StateFlow<Int> = _currentCueIndex.asStateFlow()
+
+    private val _runningCueIndex = MutableStateFlow(-1) // Questo è quello attualmente in output (o l'ultimo triggerato)
+    val runningCueIndex: StateFlow<Int> = _runningCueIndex.asStateFlow()
 
     private val _isLoopEnabled = MutableStateFlow(false)
     val isLoopEnabled: StateFlow<Boolean> = _isLoopEnabled.asStateFlow()
@@ -135,7 +138,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val cueList = show.scenes.getOrNull(sceneIndex)?.cueList ?: return
         if (index !in cueList.indices) return
 
-        _currentCueIndex.value = index
+        _runningCueIndex.value = index
+        _currentCueIndex.value = index // Allineiamo la selezione a quello che sta girando
         fadeJob?.cancel()
         fadeJob = viewModelScope.launch(Dispatchers.Default) {
             val targetCue = cueList[index]
@@ -227,6 +231,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         repository.saveShowfile(updatedShow)
     }
 
+    fun createSceneFromExisting(sourceIndex: Int, newName: String) {
+        val sourceScene = _currentShow.value.scenes.getOrNull(sourceIndex) ?: return
+        val newScene = sourceScene.copy(name = newName)
+        val updatedShow = _currentShow.value.copy(scenes = _currentShow.value.scenes.toMutableList().apply { add(newScene) })
+        _currentShow.value = updatedShow
+        repository.saveShowfile(updatedShow)
+    }
+
     fun updateDmxChannel(ch: Int, v: Byte) {
         if (ch !in 0..511) return
         stopSequence()
@@ -265,6 +277,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             while (_isSequenceRunning.value && list.isNotEmpty()) {
                 val next = (_currentCueIndex.value + 1) % list.size
                 _currentCueIndex.value = next
+                _runningCueIndex.value = next
                 triggerFadeCoroutine(list[next])
                 delay(1000)
             }
@@ -285,7 +298,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _currentShow.value = s
         repository.saveShowfile(s)
         refreshShowList()
+        _activeSceneIndex.value = 0
+        _currentCueIndex.value = -1
+        _runningCueIndex.value = -1
         updateDimmerMap()
+    }
+
+    fun copyShow(sourceName: String, newName: String) {
+        repository.loadShowfile(sourceName)?.let { source ->
+            val newShow = source.copy(showName = newName)
+            _currentShow.value = newShow
+            repository.saveShowfile(newShow)
+            refreshShowList()
+            _activeSceneIndex.value = 0
+            _currentCueIndex.value = -1
+            _runningCueIndex.value = -1
+            updateDimmerMap()
+        }
     }
 
     private fun Double.roundToInt() = kotlin.math.round(this).toInt()

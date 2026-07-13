@@ -30,6 +30,7 @@ class ShowRepository(private val context: Context) {
                             put("offset", ch.offset)
                             put("name", ch.name)
                             put("hasPresets", ch.hasPresets)
+                            put("type", ch.type.name) // Salviamo il tipo canale
 
                             val jsonPresets = JSONArray()
                             for (preset in ch.presets) {
@@ -138,7 +139,10 @@ class ShowRepository(private val context: Context) {
                             val rObj = jsonPres.getJSONObject(k)
                             preList.add(DmxValueRange(rObj.getInt("from"), rObj.getInt("to"), rObj.getString("label")))
                         }
-                        chList.add(ChannelDefinition(cObj.getInt("offset"), cObj.getString("name"), cObj.getBoolean("hasPresets"), preList))
+                        val typeStr = if (cObj.has("type")) cObj.getString("type") else ChannelType.OTHER.name
+                        val type = try { ChannelType.valueOf(typeStr) } catch (e: Exception) { ChannelType.OTHER }
+                        
+                        chList.add(ChannelDefinition(cObj.getInt("offset"), cObj.getString("name"), cObj.getBoolean("hasPresets"), preList, type))
                     }
                     customProfiles.add(FixtureProfile(pObj.getString("id"), pObj.getString("manufacturer"), pObj.getString("modelName"), pObj.getInt("channelCount"), chList))
                 }

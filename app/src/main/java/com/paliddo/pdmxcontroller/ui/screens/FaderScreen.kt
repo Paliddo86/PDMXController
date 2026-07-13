@@ -6,12 +6,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,11 +23,16 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.paliddo.pdmxcontroller.data.model.ChannelDefinition
 import com.paliddo.pdmxcontroller.data.model.FixtureInstance
+import com.paliddo.pdmxcontroller.ui.screens.components.CreateOrCopySceneDialog
+import com.paliddo.pdmxcontroller.ui.screens.components.CreateOrCopyShowDialog
+import com.paliddo.pdmxcontroller.ui.screens.components.ProfileSelectorDialog
 import com.paliddo.pdmxcontroller.ui.viewmodel.MainViewModel
 import kotlin.math.floor
 
@@ -37,6 +44,7 @@ fun FaderScreen(viewModel: MainViewModel) {
     val currentShow by viewModel.currentShow.collectAsState()
     val activeSceneIndex by viewModel.activeSceneIndex.collectAsState()
     val currentCueIndex by viewModel.currentCueIndex.collectAsState()
+    val runningCueIndex by viewModel.runningCueIndex.collectAsState()
     val isLoopEnabled by viewModel.isLoopEnabled.collectAsState()
     val isSingleModeEnabled by viewModel.isSingleModeEnabled.collectAsState()
     val isLiveMode by viewModel.isLiveMode.collectAsState()
@@ -60,7 +68,6 @@ fun FaderScreen(viewModel: MainViewModel) {
     var confirmDeleteGroupDialogOpened by remember { mutableStateOf(false) }
 
     // Input Dialog Patch
-    var newShowNameInput by remember { mutableStateOf("") }
     var newFixtureNameInput by remember { mutableStateOf("") }
     var newFixtureAddressInput by remember { mutableStateOf("1") }
     var newFixtureQuantityInput by remember { mutableStateOf("1") }
@@ -68,11 +75,38 @@ fun FaderScreen(viewModel: MainViewModel) {
     var selectedProfileIdForPatch by remember { mutableStateOf("std_dimmer") }
     var activeGroupId by remember { mutableStateOf<String?>(null) }
 
+    // Stati Selettore Profili Avanzato
+    var isProfileSelectorOpen by remember { mutableStateOf(false) }
+    val recentProfileIds = remember { mutableStateListOf("std_dimmer", "rgb_generic", "rgbw_generic") }
+
     // --- LOGICA CUE ---
     val currentScene = remember(currentShow, activeSceneIndex) {
         currentShow.scenes.getOrNull(activeSceneIndex) ?: currentShow.scenes.first()
     }
     val allProfiles = remember(currentShow) { viewModel.getAllAvailableProfiles() }
+
+    // Auto-popolamento Patch
+    LaunchedEffect(selectedProfileIdForPatch, patchDialogOpened) {
+        if (patchDialogOpened) {
+            val profile = allProfiles.find { it.id == selectedProfileIdForPatch }
+            if (newFixtureNameInput.isEmpty() || allProfiles.any { it.modelName == newFixtureNameInput }) {
+                newFixtureNameInput = profile?.modelName ?: ""
+            }
+            
+            // Calcolo primo indirizzo DMX libero
+            val instances = currentShow.fixtureInstances
+            if (instances.isEmpty()) {
+                newFixtureAddressInput = "1"
+            } else {
+                val nextAddr = instances.maxOf { inst ->
+                    val p = allProfiles.find { it.id == inst.profileId }
+                    inst.startAddress + (p?.channelCount ?: 1)
+                }
+                newFixtureAddressInput = nextAddr.coerceIn(1, 512).toString()
+            }
+        }
+    }
+
     val nextCueNumber = remember(currentScene.cueList) {
         val lastNum = currentScene.cueList.lastOrNull()?.number ?: 0f
         (floor(lastNum) + 1).toInt().toString()
@@ -165,20 +199,54 @@ fun FaderScreen(viewModel: MainViewModel) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text(
-                        text = "SHOWFILE: ${currentShow.showName} ▾",
-                        color = colorCyan, fontSize = 15.sp, fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable { if (!isLiveMode && !isSettingsOpen) { viewModel.refreshShowList(); showMenuExpanded = true } }
-                    )
-                    Text(
-                        text = when {
-                            isSettingsOpen -> "IMPOSTAZIONI DI SISTEMA"
-                            isLiveMode -> "MODALITÀ LIVE - VIRTUAL EXECUTOR"
-                            else -> "MODALITÀ DI PROGRAMMAZIONE"
-                        },
-                        color = if (isLiveMode) colorGreenLive else colorPurple, fontSize = 9.sp, fontWeight = FontWeight.SemiBold
-                    )
+                Box {
+                    Column {
+                        Text(
+                            text = "SHOWFILE: ${currentShow.showName} ▾",
+                            color = colorCyan, fontSize = 15.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.clickable {
+                                if (!isLiveMode && !isSettingsOpen) {
+                                    viewModel.refreshShowList()
+                                    showMenuExpanded = true
+                                }
+                            }
+                        )
+                        Text(
+                            text = when {
+                                isSettingsOpen -> "IMPOSTAZIONI DI SISTEMA"
+                                isLiveMode -> "MODALITÀ LIVE"
+                                else -> "MODALITÀ DI PROGRAMMAZIONE"
+                            },
+                            color = if (isLiveMode) colorGreenLive else colorPurple,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    // --- DROPDOWN MENU SHOW (Spostato qui per corretto ancoraggio) ---
+                    DropdownMenu(
+                        expanded = showMenuExpanded,
+                        onDismissRequest = { showMenuExpanded = false },
+                        modifier = Modifier.background(colorSurface)
+                    ) {
+                        availableShows.forEach { showName ->
+                            DropdownMenuItem(
+                                text = { Text(showName, color = colorTextPrimary) },
+                                onClick = {
+                                    viewModel.loadShow(showName)
+                                    showMenuExpanded = false
+                                }
+                            )
+                        }
+                        Divider(color = colorSurfaceAccent)
+                        DropdownMenuItem(
+                            text = { Text("+ Nuovo Show", color = colorCyan) },
+                            onClick = {
+                                createShowDialogOpened = true
+                                showMenuExpanded = false
+                            }
+                        )
+                    }
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -194,8 +262,13 @@ fun FaderScreen(viewModel: MainViewModel) {
                                 }
                             }
                         }
-                        Button(onClick = { patchDialogOpened = true }, colors = ButtonDefaults.buttonColors(containerColor = colorCyan), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp)) {
-                            Text("🛠 PATCH", color = colorBackground, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Button(
+                            onClick = { patchDialogOpened = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = colorSurfaceAccent),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+                            modifier = Modifier.border(1.dp, colorCyan.copy(alpha = 0.5f), RoundedCornerShape(50))
+                        ) {
+                            Text("🛠 PATCH", color = colorTextPrimary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -254,7 +327,12 @@ fun FaderScreen(viewModel: MainViewModel) {
                                 OutlinedTextField(value = "192.168.4.1", onValueChange = {}, textStyle = TextStyle(color = colorTextPrimary))
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text("Porta Art-Net (Default 6454):", color = colorTextPrimary.copy(0.6f))
-                                OutlinedTextField(value = "6454", onValueChange = {}, textStyle = TextStyle(color = colorTextPrimary))
+                                OutlinedTextField(
+                                    value = "6454",
+                                    onValueChange = {},
+                                    textStyle = TextStyle(color = colorTextPrimary),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                )
                             }
                             "FIXTURES" -> Text("Libreria Fixture Globali", color = colorCyan)
                             "BACKUP" -> Text("Esportazione/Importazione Show", color = colorCyan)
@@ -267,8 +345,71 @@ fun FaderScreen(viewModel: MainViewModel) {
                 // VISTA WORKSPACE (Programmazione o Live)
                 // ==========================================
                 Row(modifier = Modifier.fillMaxSize()) {
+                    if (!isLiveMode) {
+                        // COLONNA EDIT CUE (A Sinistra)
+                        Column(
+                            modifier = Modifier.width(160.dp).fillMaxHeight().background(colorSurface, RoundedCornerShape(8.dp)).padding(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text("EDIT CUE", color = colorPurple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            
+                            OutlinedTextField(
+                                value = cueNumberInput,
+                                onValueChange = { cueNumberInput = it },
+                                label = { Text("Num", fontSize = 10.sp) },
+                                textStyle = TextStyle(color = colorTextPrimary, fontSize = 12.sp),
+                                colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = colorSurfaceAccent, focusedBorderColor = colorPurple),
+                                modifier = Modifier.fillMaxWidth(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                            )
+                            OutlinedTextField(
+                                value = cueNameInput,
+                                onValueChange = { cueNameInput = it },
+                                label = { Text("Nome", fontSize = 10.sp) },
+                                textStyle = TextStyle(color = colorTextPrimary, fontSize = 12.sp),
+                                colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = colorSurfaceAccent, focusedBorderColor = colorPurple),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            OutlinedTextField(
+                                value = cueFadeInput,
+                                onValueChange = { cueFadeInput = it },
+                                label = { Text("Fade (s)", fontSize = 10.sp) },
+                                textStyle = TextStyle(color = colorTextPrimary, fontSize = 12.sp),
+                                colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = colorSurfaceAccent, focusedBorderColor = colorPurple),
+                                modifier = Modifier.fillMaxWidth(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                            )
+
+                            Button(
+                                onClick = {
+                                    val num = cueNumberInput.text.toFloatOrNull() ?: 0f
+                                    val fade = cueFadeInput.text.toFloatOrNull() ?: 2.0f
+                                    val finalName = if (cueNameInput.text.isEmpty()) "CUE $num" else cueNameInput.text
+                                    viewModel.recordCue(num, finalName, fade)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = colorPurple)
+                            ) {
+                                Text("🔴 RECORD", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            Button(
+                                onClick = {
+                                    val currentCue = currentScene.cueList.getOrNull(currentCueIndex)
+                                    currentCue?.let { viewModel.duplicateCue(it) }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = colorSurfaceAccent),
+                                enabled = currentCueIndex != -1
+                            ) {
+                                Text("👯 DUPLICA", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                    }
+
                     // AREA CENTRALE (Fader o Executor)
-                    Column(modifier = Modifier.weight(0.65f).fillMaxHeight()) {
+                    Column(modifier = Modifier.weight(if (isLiveMode) 0.65f else 0.5f).fillMaxHeight()) {
                         if (isLiveMode) {
                             // LIVE MODE: Griglia Executor
                             Box(modifier = Modifier.fillMaxSize().background(colorSurface, shape = RoundedCornerShape(8.dp)).padding(10.dp)) {
@@ -299,6 +440,20 @@ fun FaderScreen(viewModel: MainViewModel) {
                                 }
                             }
                             Text(text = "SELEZIONE FIXTURE:", color = colorTextPrimary.copy(0.5f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Box(modifier = Modifier.weight(1f)) {
+                                    // Spazio per altri elementi se servono
+                                }
+                                if (selectedFixtureIds.isNotEmpty()) {
+                                    Text(
+                                        text = "DESELEZIONA TUTTO ✕",
+                                        color = colorDisconnected,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.clickable { selectedFixtureIds.clear(); activeGroupId = null }.padding(vertical = 4.dp)
+                                    )
+                                }
+                            }
                             Box(modifier = Modifier.fillMaxWidth().height(90.dp).background(colorSurface, shape = RoundedCornerShape(6.dp)).padding(6.dp)) {
                                 LazyVerticalGrid(columns = GridCells.Adaptive(minSize = 130.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     items(currentShow.fixtureInstances) { fixture ->
@@ -315,20 +470,96 @@ fun FaderScreen(viewModel: MainViewModel) {
                             Spacer(modifier = Modifier.height(8.dp))
                             // Slider Parametri
                             Box(modifier = Modifier.fillMaxWidth().weight(1f).background(colorSurface, shape = RoundedCornerShape(8.dp)).padding(8.dp)) {
-                                val currentSelFixture = currentShow.fixtureInstances.find { it.id == selectedFixtureIds.firstOrNull() }
-                                if (currentSelFixture == null) {
+                                if (selectedFixtureIds.isEmpty()) {
                                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Seleziona fixture per i controlli", color = colorTextPrimary.copy(0.4f)) }
                                 } else {
-                                    val profile = allProfiles.find { it.id == currentSelFixture.profileId }
-                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        profile?.channels?.let { channels ->
-                                            itemsIndexed(channels) { _, ch ->
-                                                val realDmx = currentSelFixture.startAddress - 1 + ch.offset
-                                                val valRaw = if (realDmx in dmxData.indices) dmxData[realDmx].toInt() and 0xFF else 0
-                                                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxHeight().width(110.dp).background(colorSurfaceAccent, shape = RoundedCornerShape(6.dp)).padding(6.dp)) {
+                                    // Trova i canali comuni a tutte le fixture selezionate (per tipo o nome)
+                                    val commonChannels = remember(selectedFixtureIds.toList(), currentShow.fixtureInstances) {
+                                        val selectedInstances = currentShow.fixtureInstances.filter { it.id in selectedFixtureIds }
+                                        if (selectedInstances.isEmpty()) return@remember emptyList<ChannelDefinition>()
+                                        
+                                        val firstProfile = allProfiles.find { it.id == selectedInstances.first().profileId }
+                                        val firstChannels = firstProfile?.channels ?: emptyList()
+                                        
+                                        firstChannels.filter { ch1 ->
+                                            selectedInstances.all { inst ->
+                                                val p = allProfiles.find { it.id == inst.profileId }
+                                                p?.channels?.any { ch2 -> ch2.name == ch1.name && ch2.type == ch1.type } == true
+                                            }
+                                        }
+                                    }
+
+                                    if (commonChannels.isEmpty()) {
+                                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Nessun parametro comune selezionato", color = colorTextPrimary.copy(0.4f)) }
+                                    } else {
+                                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                            items(commonChannels, key = { it.name + it.offset }) { ch ->
+                                                // Prendi il valore della prima fixture per visualizzazione
+                                                val firstInst = currentShow.fixtureInstances.find { it.id == selectedFixtureIds.first() }!!
+                                                val realDmxFirst = firstInst.startAddress - 1 + ch.offset
+                                                val valRaw = if (realDmxFirst in dmxData.indices) dmxData[realDmxFirst].toInt() and 0xFF else 0
+                                                
+                                                Column(
+                                                    horizontalAlignment = Alignment.CenterHorizontally, 
+                                                    modifier = Modifier.fillMaxHeight().width(110.dp).background(colorSurfaceAccent, shape = RoundedCornerShape(6.dp)).padding(6.dp)
+                                                ) {
                                                     Text(text = ch.name.uppercase(), color = colorCyan, fontSize = 10.sp, maxLines = 1)
-                                                    Text(text = "$valRaw", color = colorTextPrimary, fontWeight = FontWeight.Bold)
-                                                    Slider(value = valRaw.toFloat(), onValueChange = { nv -> selectedFixtureIds.forEach { fid -> currentShow.fixtureInstances.find { it.id == fid }?.let { inst -> viewModel.updateDmxChannel(inst.startAddress - 1 + ch.offset, nv.toInt().toByte()) } } }, valueRange = 0f..255f, modifier = Modifier.graphicsLayer { rotationZ = -90f }.layout { m, c -> val p = m.measure(c.copy(minWidth = c.maxHeight, maxWidth = c.maxHeight)); layout(p.height, p.width) { p.place(-p.width / 2 + p.height / 2, -p.height / 2 + p.width / 2) } }.fillMaxHeight().weight(1f))
+                                                    
+                                                    if (ch.hasPresets && ch.presets.isNotEmpty()) {
+                                                        // Visualizzazione PRESET (Bottoni grandi che riempiono lo spazio)
+                                                        Text(text = ch.presets.find { valRaw in it.from..it.to }?.label ?: "$valRaw", color = colorTextPrimary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                                        Spacer(modifier = Modifier.height(4.dp))
+                                                        Column(modifier = Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                            ch.presets.forEach { preset ->
+                                                                val isCurrent = valRaw in preset.from..preset.to
+                                                                Box(
+                                                                    modifier = Modifier
+                                                                        .fillMaxWidth()
+                                                                        .weight(1f)
+                                                                        .background(if (isCurrent) colorPurple else colorBackground, RoundedCornerShape(4.dp))
+                                                                        .border(1.dp, if (isCurrent) colorCyan else Color.Transparent, RoundedCornerShape(4.dp))
+                                                                        .clickable {
+                                                                            selectedFixtureIds.forEach { fid ->
+                                                                                currentShow.fixtureInstances.find { it.id == fid }?.let { inst ->
+                                                                                    val p = allProfiles.find { it.id == inst.profileId }
+                                                                                    val actualCh = p?.channels?.find { it.name == ch.name && it.type == ch.type }
+                                                                                    actualCh?.let { viewModel.updateDmxChannel(inst.startAddress - 1 + it.offset, preset.from.toByte()) }
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                        .padding(horizontal = 4.dp),
+                                                                    contentAlignment = Alignment.Center
+                                                                ) {
+                                                                    Text(preset.label, color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, lineHeight = 10.sp)
+                                                                }
+                                                            }
+                                                        }
+                                                    } else {
+                                                        // Visualizzazione SLIDER STANDARD (Stile Master)
+                                                        Text(text = "$valRaw", color = colorTextPrimary, fontWeight = FontWeight.Bold)
+                                                        Spacer(modifier = Modifier.height(10.dp))
+                                                        Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                                            Slider(
+                                                                value = valRaw.toFloat(),
+                                                                onValueChange = { nv ->
+                                                                    selectedFixtureIds.forEach { fid ->
+                                                                        currentShow.fixtureInstances.find { it.id == fid }?.let { inst ->
+                                                                            val p = allProfiles.find { it.id == inst.profileId }
+                                                                            val actualCh = p?.channels?.find { it.name == ch.name && it.type == ch.type }
+                                                                            actualCh?.let { viewModel.updateDmxChannel(inst.startAddress - 1 + it.offset, nv.toInt().toByte()) }
+                                                                        }
+                                                                    }
+                                                                },
+                                                                valueRange = 0f..255f,
+                                                                colors = SliderDefaults.colors(activeTrackColor = colorPurple, inactiveTrackColor = colorBackground),
+                                                                thumb = { Box(modifier = Modifier.width(24.dp).height(36.dp).background(colorCyan, shape = RoundedCornerShape(4.dp))) },
+                                                                modifier = Modifier.graphicsLayer { rotationZ = -90f }.layout { m, c ->
+                                                                    val p = m.measure(c.copy(minWidth = c.maxHeight, maxWidth = c.maxHeight))
+                                                                    layout(p.height, p.width) { p.place(-p.width / 2 + p.height / 2, -p.height / 2 + p.width / 2) }
+                                                                }.fillMaxHeight()
+                                                            )
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
@@ -343,7 +574,38 @@ fun FaderScreen(viewModel: MainViewModel) {
                     // COLONNA 3: CUE LIST & CONTROLLO GO
                     Column(modifier = Modifier.weight(0.35f).fillMaxHeight().background(Color(0xFF11141A), shape = RoundedCornerShape(8.dp)).padding(10.dp)) {
                         Row(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text(text = "SCENA: ${currentScene.name}", color = colorPurple, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Box {
+                                Text(
+                                    text = "SCENA: ${currentScene.name} ▾",
+                                    color = colorPurple,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.clickable { sceneMenuExpanded = true }
+                                )
+                                DropdownMenu(
+                                    expanded = sceneMenuExpanded,
+                                    onDismissRequest = { sceneMenuExpanded = false },
+                                    modifier = Modifier.background(colorSurface)
+                                ) {
+                                    currentShow.scenes.forEachIndexed { idx, scene ->
+                                        DropdownMenuItem(
+                                            text = { Text(scene.name, color = colorTextPrimary) },
+                                            onClick = {
+                                                viewModel.selectScene(idx)
+                                                sceneMenuExpanded = false
+                                            }
+                                        )
+                                    }
+                                    Divider(color = colorSurfaceAccent)
+                                    DropdownMenuItem(
+                                        text = { Text("+ Nuova Scena", color = colorCyan) },
+                                        onClick = {
+                                            createSceneDialogOpened = true
+                                            sceneMenuExpanded = false
+                                        }
+                                    )
+                                }
+                            }
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(modifier = Modifier.size(8.dp).background(if (isConnected) colorGreenLive else colorDisconnected, RoundedCornerShape(50)))
                                 Spacer(modifier = Modifier.width(4.dp))
@@ -356,8 +618,37 @@ fun FaderScreen(viewModel: MainViewModel) {
                             LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 itemsIndexed(currentScene.cueList) { index, cue ->
                                     val isSelected = index == currentCueIndex
-                                    Row(modifier = Modifier.fillMaxWidth().background(if (isSelected) colorPurple.copy(0.4f) else Color.Transparent, shape = RoundedCornerShape(4.dp)).clickable { if (isSingleModeEnabled || isLiveMode) viewModel.selectCueManually(index) else viewModel.triggerFadeToCue(index) }.padding(8.dp)) {
-                                        Text(text = "${cue.number}: ${cue.name}", color = if (isSelected) colorCyan else colorTextPrimary, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                                    val isActive = index == runningCueIndex
+                                    
+                                    val bgColor = when {
+                                        isActive && isSelected -> colorGreenLive.copy(0.4f)
+                                        isActive -> colorGreenLive.copy(0.2f)
+                                        isSelected -> colorPurple.copy(0.4f)
+                                        else -> Color.Transparent
+                                    }
+                                    
+                                    val textColor = when {
+                                        isActive -> colorGreenLive
+                                        isSelected -> colorCyan
+                                        else -> colorTextPrimary
+                                    }
+
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(bgColor, shape = RoundedCornerShape(4.dp))
+                                            .border(
+                                                width = 1.dp,
+                                                color = if (isSelected) colorCyan.copy(0.5f) else Color.Transparent,
+                                                shape = RoundedCornerShape(4.dp)
+                                            )
+                                            .clickable { 
+                                                if (isSingleModeEnabled || isLiveMode) viewModel.selectCueManually(index) 
+                                                else viewModel.triggerFadeToCue(index) 
+                                            }
+                                            .padding(8.dp)
+                                    ) {
+                                        Text(text = "${cue.number}: ${cue.name}", color = textColor, fontSize = 13.sp, modifier = Modifier.weight(1f))
                                         if (!isLiveMode) Text("✕", color = colorDisconnected, modifier = Modifier.clickable { viewModel.deleteCue(index) })
                                     }
                                 }
@@ -387,10 +678,184 @@ fun FaderScreen(viewModel: MainViewModel) {
         }
     }
 
-    // --- DROPDOWN MENU SHOW ---
-    DropdownMenu(expanded = showMenuExpanded, onDismissRequest = { showMenuExpanded = false }, modifier = Modifier.background(colorSurface)) {
-        availableShows.forEach { showName ->
-            DropdownMenuItem(text = { Text(showName, color = colorTextPrimary) }, onClick = { viewModel.loadShow(showName); showMenuExpanded = false })
-        }
+    // --- DROPDOWN MENU SHOW (Rimosso perché spostato sopra per ancoraggio) ---
+
+    // --- DIALOG PATCH ---
+    if (patchDialogOpened) {
+        AlertDialog(
+            onDismissRequest = { patchDialogOpened = false },
+            containerColor = colorSurface,
+            title = { Text("PATCH NUOVE FIXTURE", color = colorCyan) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(value = newFixtureNameInput, onValueChange = { newFixtureNameInput = it }, label = { Text("Nome Base") }, textStyle = TextStyle(color = colorTextPrimary))
+                    
+                    Text("Profilo:", color = colorTextPrimary, fontSize = 12.sp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(colorSurfaceAccent, RoundedCornerShape(4.dp))
+                                .clickable { isProfileSelectorOpen = true }
+                                .padding(12.dp)
+                        ) {
+                            Text(
+                                text = allProfiles.find { it.id == selectedProfileIdForPatch }?.modelName ?: "Seleziona...",
+                                color = colorTextPrimary
+                            )
+                        }
+                        Button(
+                            onClick = { isProfileSelectorOpen = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = colorPurple),
+                            shape = RoundedCornerShape(4.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp)
+                        ) {
+                            Text("🔍 LIBRERIA", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    
+                    // Lista rapida (Solo Recenti)
+                    val recentProfiles = allProfiles.filter { recentProfileIds.contains(it.id) }
+                    if (recentProfiles.isNotEmpty()) {
+                        Text("Recenti:", color = colorTextPrimary.copy(alpha = 0.6f), fontSize = 10.sp)
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(recentProfiles) { p ->
+                        FilterChip(
+                                    selected = selectedProfileIdForPatch == p.id,
+                                    onClick = { 
+                                        selectedProfileIdForPatch = p.id
+                                        newFixtureNameInput = p.modelName
+                                    },
+                                    label = { Text(p.modelName) },
+                                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = colorCyan, labelColor = colorTextPrimary)
+                                )
+                            }
+                        }
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = newFixtureAddressInput,
+                            onValueChange = { newFixtureAddressInput = it },
+                            label = { Text("DMX") },
+                            modifier = Modifier.weight(1f),
+                            textStyle = TextStyle(color = colorTextPrimary),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+                        OutlinedTextField(
+                            value = newFixtureQuantityInput,
+                            onValueChange = { newFixtureQuantityInput = it },
+                            label = { Text("Quantità") },
+                            modifier = Modifier.weight(1f),
+                            textStyle = TextStyle(color = colorTextPrimary),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val addr = newFixtureAddressInput.toIntOrNull() ?: 1
+                    val quant = newFixtureQuantityInput.toIntOrNull() ?: 1
+                    viewModel.patchMultipleFixtures(newFixtureNameInput, selectedProfileIdForPatch, addr, quant)
+                    patchDialogOpened = false
+                }, colors = ButtonDefaults.buttonColors(containerColor = colorCyan)) {
+                    Text("PATCH", color = colorBackground)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { patchDialogOpened = false }) { Text("ANNULLA", color = colorTextPrimary) }
+            }
+        )
+    }
+
+    // --- DIALOG GRUPPI ---
+    if (groupDialogOpened) {
+        AlertDialog(
+            onDismissRequest = { groupDialogOpened = false },
+            containerColor = colorSurface,
+            title = { Text("CREA GRUPPO", color = colorPurple) },
+            text = {
+                OutlinedTextField(value = newGroupNameInput, onValueChange = { newGroupNameInput = it }, label = { Text("Nome Gruppo") }, textStyle = TextStyle(color = colorTextPrimary))
+            },
+            confirmButton = {
+                Button(onClick = {
+                    viewModel.createFixtureGroup(newGroupNameInput, selectedFixtureIds.toList())
+                    groupDialogOpened = false
+                    newGroupNameInput = ""
+                }, colors = ButtonDefaults.buttonColors(containerColor = colorPurple)) {
+                    Text("SALVA", color = Color.White)
+                }
+            }
+        )
+    }
+    // --- DIALOG ELIMINA GRUPPO ---
+    if (confirmDeleteGroupDialogOpened) {
+        AlertDialog(
+            onDismissRequest = { confirmDeleteGroupDialogOpened = false },
+            containerColor = colorSurface,
+            title = { Text("ELIMINA GRUPPO", color = colorDisconnected) },
+            text = { Text("Sei sicuro di voler eliminare questo gruppo?", color = colorTextPrimary) },
+            confirmButton = {
+                Button(onClick = {
+                    activeGroupId?.let { viewModel.deleteFixtureGroup(it) }
+                    confirmDeleteGroupDialogOpened = false
+                    activeGroupId = null
+                    selectedFixtureIds.clear()
+                }, colors = ButtonDefaults.buttonColors(containerColor = colorDisconnected)) {
+                    Text("ELIMINA", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDeleteGroupDialogOpened = false }) { Text("ANNULLA", color = colorTextPrimary) }
+            }
+        )
+    }
+
+    // --- SELETTORE PROFILI AVANZATO ---
+    if (isProfileSelectorOpen) {
+        ProfileSelectorDialog(
+            allProfiles = allProfiles,
+            selectedProfileId = selectedProfileIdForPatch,
+            onProfileSelected = { id ->
+                selectedProfileIdForPatch = id
+                if (!recentProfileIds.contains(id)) {
+                    recentProfileIds.add(0, id)
+                    if (recentProfileIds.size > 5) recentProfileIds.removeAt(recentProfileIds.size - 1)
+                }
+                isProfileSelectorOpen = false
+            },
+            onDismiss = { isProfileSelectorOpen = false }
+        )
+    }
+
+    // --- DIALOG GESTIONE SHOW ---
+    if (createShowDialogOpened) {
+        CreateOrCopyShowDialog(
+            availableShows = availableShows,
+            onConfirm = { name, source ->
+                if (source != null) viewModel.copyShow(source, name)
+                else viewModel.createNewShow(name)
+                createShowDialogOpened = false
+            },
+            onDismiss = { createShowDialogOpened = false }
+        )
+    }
+
+    // --- DIALOG GESTIONE SCENE ---
+    if (createSceneDialogOpened) {
+        CreateOrCopySceneDialog(
+            existingScenes = currentShow.scenes.map { it.name },
+            onConfirm = { name, sourceIndex ->
+                if (sourceIndex != null) viewModel.createSceneFromExisting(sourceIndex, name)
+                else viewModel.createNewScene(name)
+                createSceneDialogOpened = false
+            },
+            onDismiss = { createSceneDialogOpened = false }
+        )
     }
 }

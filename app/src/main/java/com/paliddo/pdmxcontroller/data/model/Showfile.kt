@@ -3,6 +3,7 @@ package com.paliddo.pdmxcontroller.data.model
 import kotlinx.serialization.Serializable
 
 // Range di valori per canali discreti (es. Preset Ruota Colori)
+@Serializable
 data class DmxValueRange(
     val from: Int,
     val to: Int,
@@ -16,7 +17,7 @@ data class ChannelDefinition(
     val name: String,
     val hasPresets: Boolean = false,
     val presets: List<DmxValueRange> = emptyList(),
-    val type: ChannelType = ChannelType.OTHER // <-- Nuovo campo con valore di default per retrocompatibilità
+    val type: ChannelType = ChannelType.OTHER
 )
 
 @Serializable
@@ -46,6 +47,7 @@ data class FixtureProfile(
 )
 
 // Assegnazione fisica della Fixture (Patch)
+@Serializable
 data class FixtureInstance(
     val id: String,
     val userGivenName: String,
@@ -53,14 +55,16 @@ data class FixtureInstance(
     val startAddress: Int
 )
 
-// NUOVO: Rappresenta un gruppo di selezione rapida delle Fixture
+// NUOVO: Rappresenta un grupo di selezione rapida delle Fixture
+@Serializable
 data class FixtureGroup(
     val id: String,
     val name: String,
-    val fixtureIds: List<String> // Elenco degli ID delle fixture appartenenti a questo gruppo
+    val fixtureIds: List<String>
 )
 
 // Singola memoria DMX (Cue Point)
+@Serializable
 data class Cue(
     val number: Float,
     val name: String,
@@ -69,17 +73,19 @@ data class Cue(
 )
 
 // Una Cue List indipendente (Scena)
+@Serializable
 data class Scene(
     val name: String,
     val cueList: List<Cue> = emptyList()
 )
 
 // Showfile generale con supporto a Fixture e Gruppi
+@Serializable
 data class Showfile(
     val showName: String,
     val version: Int = 5,
     val fixtureInstances: List<FixtureInstance> = emptyList(),
     val customProfiles: List<FixtureProfile> = emptyList(),
-    val fixtureGroups: List<FixtureGroup> = emptyList(), // NUOVO: Lista dei gruppi salvati
+    val fixtureGroups: List<FixtureGroup> = emptyList(),
     val scenes: List<Scene> = listOf(Scene("Scena Principale"))
 )

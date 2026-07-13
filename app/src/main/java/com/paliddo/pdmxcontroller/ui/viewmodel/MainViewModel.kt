@@ -61,6 +61,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isLiveMode = MutableStateFlow(false)
     val isLiveMode: StateFlow<Boolean> = _isLiveMode.asStateFlow()
 
+    private val _grandMaster = MutableStateFlow(100f)
+    val grandMaster: StateFlow<Float> = _grandMaster.asStateFlow()
+
     private val _availableShows = MutableStateFlow<List<String>>(emptyList())
     val availableShows: StateFlow<List<String>> = _availableShows.asStateFlow()
 
@@ -304,9 +307,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun updateDmxChannel(ch: Int, v: Byte) {
         if (ch !in 0..511) return
         stopSequence()
-        val curr = _dmxState.value.clone(); curr[ch] = v; _dmxState.value = curr
-        val now = System.currentTimeMillis()
-        if (now - lastSendTime >= dmxFrameRateInterval) { artNetService?.sendUpdate(ch, v); lastSendTime = now }
+        
+        // Aggiorniamo lo stato nominale nel ViewModel
+        val curr = _dmxState.value.clone()
+        curr[ch] = v
+        _dmxState.value = curr
+        
+        // Aggiorniamo IMMEDIATAMENTE il buffer del servizio senza rate-limiting qui.
+        // Sarà il loop del servizio a gestire l'invio costante a 25fps.
+        artNetService?.dmxData?.set(ch, v)
+    }
+
+    fun setGrandMaster(v: Float) {
+        _grandMaster.value = v
+        artNetService?.grandMasterValue = v
     }
 
     fun recordCue(num: Float, name: String, fadeSec: Float) {
@@ -415,6 +429,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
             }
+            // Sincronizziamo la mappa con il servizio foreground
+            artNetService?.syncDimmerMap(dimmerAddresses)
         }
     }
 

@@ -33,6 +33,10 @@ class ArtNetForegroundService : Service() {
     private var port: Int = 6454
     private var universe: Int = 0
     private var isConnectionEnabled: Boolean = true
+    var grandMasterValue: Float = 100f
+
+    // Indirizzi DMX assoluti dei Dimmer per applicazione Master
+    private val dimmerAddresses = mutableSetOf<Int>()
 
     // Stato di handshake reale esposto al ViewModel
     val isControllerAlive = MutableStateFlow(false)
@@ -59,6 +63,13 @@ class ArtNetForegroundService : Service() {
                 connectionJob?.cancel()
                 startNetworkLoop()
             }
+        }
+    }
+
+    fun syncDimmerMap(addresses: Set<Int>) {
+        synchronized(dimmerAddresses) {
+            dimmerAddresses.clear()
+            dimmerAddresses.addAll(addresses)
         }
     }
 
@@ -144,8 +155,21 @@ class ArtNetForegroundService : Service() {
                 }
                 
                 while (isActive && isConnectionEnabled) {
-                    artNetService.sendArtDmx(targetIp, universe, dmxData, port)
-                    delay(40) 
+                    // Applichiamo il Grand Master ai canali dimmer prima di inviare
+                    val outputData = dmxData.copyOf()
+                    val multiplier = grandMasterValue / 100f
+                    
+                    synchronized(dimmerAddresses) {
+                        for (addr in dimmerAddresses) {
+                            if (addr in outputData.indices) {
+                                val nominalValue = outputData[addr].toInt() and 0xFF
+                                outputData[addr] = (nominalValue * multiplier).toInt().toByte()
+                            }
+                        }
+                    }
+                    
+                    artNetService.sendArtDmx(targetIp, universe, outputData, port)
+                    delay(33) // Stream stabile a ~30Hz (1000ms / 33ms = ~30fps)
                 }
             }
 

@@ -51,10 +51,10 @@ fun FaderScreen(viewModel: MainViewModel) {
     val isLiveMode by viewModel.isLiveMode.collectAsState()
     val availableShows by viewModel.availableShows.collectAsState()
     val isConnected by viewModel.isControllerConnected.collectAsState()
+    val grandMasterValue by viewModel.grandMaster.collectAsState()
 
     // --- STATI LOCALI ---
     val selectedFixtureIds = remember { mutableStateListOf<String>() }
-    var grandMasterValue by remember { mutableStateOf(100f) }
     var previousMasterValue by remember { mutableStateOf(100f) }
 
     // Stati Navigazione Settings
@@ -149,7 +149,7 @@ fun FaderScreen(viewModel: MainViewModel) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Slider(
                         value = grandMasterValue,
-                        onValueChange = { grandMasterValue = it },
+                        onValueChange = { viewModel.setGrandMaster(it) },
                         valueRange = 0f..100f,
                         colors = SliderDefaults.colors(activeTrackColor = colorPurple, inactiveTrackColor = colorBackground),
                         thumb = { Box(modifier = Modifier.width(24.dp).height(36.dp).background(colorCyan, shape = RoundedCornerShape(4.dp))) },
@@ -166,9 +166,9 @@ fun FaderScreen(viewModel: MainViewModel) {
                 onClick = {
                     if (grandMasterValue > 0f) {
                         previousMasterValue = grandMasterValue
-                        grandMasterValue = 0f
+                        viewModel.setGrandMaster(0f)
                     } else {
-                        grandMasterValue = if (previousMasterValue > 0f) previousMasterValue else 100f
+                        viewModel.setGrandMaster(if (previousMasterValue > 0f) previousMasterValue else 100f)
                     }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = if (grandMasterValue == 0f) colorCyan else colorDisconnected),

@@ -1,5 +1,7 @@
 package com.paliddo.pdmxcontroller.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
@@ -16,6 +18,8 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -56,6 +60,29 @@ fun FaderScreen(viewModel: MainViewModel) {
     val availableShows by viewModel.availableShows.collectAsState()
     val isConnected by viewModel.isControllerConnected.collectAsState()
     val grandMasterValue by viewModel.grandMaster.collectAsState()
+    val backupStatus by viewModel.backupStatus.collectAsState()
+
+    // --- LAUNCHER PER BACKUP ---
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        uri?.let { viewModel.exportShow(it) }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let { viewModel.importShow(it) }
+    }
+
+    // Monitoraggio messaggi di backup
+    val context = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(backupStatus) {
+        backupStatus?.let {
+            android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show()
+            viewModel.clearBackupStatus()
+        }
+    }
 
     // --- STATI LOCALI ---
     val selectedFixtureIds = remember { mutableStateListOf<String>() }
@@ -382,7 +409,47 @@ fun FaderScreen(viewModel: MainViewModel) {
                                         Text("+ CREA NUOVO PROFILO")
                                     }
                                 }
-                                "BACKUP" -> Text("Esportazione/Importazione Show", color = colorCyan)
+                                "BACKUP" -> Column(modifier = Modifier.fillMaxSize().padding(10.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                    Text("BACKUP E PORTABILITÀ", color = colorCyan, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                    
+                                    Card(
+                                        colors = CardDefaults.cardColors(containerColor = colorSurfaceAccent),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                            Text("ESPORTA SHOW CORRENTE", color = colorTextPrimary, fontWeight = FontWeight.Bold)
+                                            Text("Salva lo showfile '${currentShow.showName}' in un file JSON per condividerlo o spostarlo su un altro tablet.", color = colorTextPrimary.copy(alpha = 0.6f), fontSize = 12.sp)
+                                            Button(
+                                                onClick = { exportLauncher.launch("${currentShow.showName}.json") },
+                                                modifier = Modifier.fillMaxWidth(),
+                                                colors = ButtonDefaults.buttonColors(containerColor = colorPurple)
+                                            ) {
+                                                Icon(imageVector = Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text("ESPORTA ORA (.json)")
+                                            }
+                                        }
+                                    }
+
+                                    Card(
+                                        colors = CardDefaults.cardColors(containerColor = colorSurfaceAccent),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                            Text("IMPORTA SHOW ESTERNO", color = colorTextPrimary, fontWeight = FontWeight.Bold)
+                                            Text("Carica uno showfile salvato precedentemente. Se il nome esiste già, ne verrà creata una copia.", color = colorTextPrimary.copy(alpha = 0.6f), fontSize = 12.sp)
+                                            Button(
+                                                onClick = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
+                                                modifier = Modifier.fillMaxWidth(),
+                                                colors = ButtonDefaults.buttonColors(containerColor = colorCyan)
+                                            ) {
+                                                Icon(imageVector = Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(18.dp))
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text("IMPORTA FILE", color = colorBackground)
+                                            }
+                                        }
+                                    }
+                                }
                                 "ABOUT" -> Text("pdmxcontroller v1.0.0", color = colorCyan)
                             }
                         }

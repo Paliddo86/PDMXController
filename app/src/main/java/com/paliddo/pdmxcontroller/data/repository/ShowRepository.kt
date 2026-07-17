@@ -11,112 +11,124 @@ class ShowRepository(private val context: Context) {
 
     fun saveShowfile(showfile: Showfile): Boolean {
         return try {
-            val jsonObject = JSONObject()
-            jsonObject.put("showName", showfile.showName)
-            jsonObject.put("version", showfile.version)
-
-            // 1. SALVATAGGIO PROFILI
-            val jsonProfilesArray = JSONArray()
-            for (profile in showfile.customProfiles) {
-                val jsonProfile = JSONObject().apply {
-                    put("id", profile.id)
-                    put("manufacturer", profile.manufacturer)
-                    put("modelName", profile.modelName)
-                    put("channelCount", profile.channelCount)
-
-                    val jsonChannels = JSONArray()
-                    for (ch in profile.channels) {
-                        val jsonCh = JSONObject().apply {
-                            put("offset", ch.offset)
-                            put("name", ch.name)
-                            put("hasPresets", ch.hasPresets)
-                            put("type", ch.type.name) // Salviamo il tipo canale
-
-                            val jsonPresets = JSONArray()
-                            for (preset in ch.presets) {
-                                val jsonPreset = JSONObject().apply {
-                                    put("from", preset.from)
-                                    put("to", preset.to)
-                                    put("label", preset.label)
-                                }
-                                jsonPresets.put(jsonPreset)
-                            }
-                            put("presets", jsonPresets)
-                        }
-                        jsonChannels.put(jsonCh)
-                    }
-                    put("channels", jsonChannels)
-                }
-                jsonProfilesArray.put(jsonProfile)
-            }
-            jsonObject.put("customProfiles", jsonProfilesArray)
-
-            // 2. SALVATAGGIO PATCH (ISTANZE FIXTURE)
-            val jsonInstancesArray = JSONArray()
-            for (instance in showfile.fixtureInstances) {
-                val jsonInstance = JSONObject().apply {
-                    put("id", instance.id)
-                    put("userGivenName", instance.userGivenName)
-                    put("profileId", instance.profileId)
-                    put("startAddress", instance.startAddress)
-                }
-                jsonInstancesArray.put(jsonInstance)
-            }
-            jsonObject.put("fixtureInstances", jsonInstancesArray)
-
-            // 3. NUOVO: SALVATAGGIO GRUPPI
-            val jsonGroupsArray = JSONArray()
-            for (group in showfile.fixtureGroups) {
-                val jsonGroup = JSONObject().apply {
-                    put("id", group.id)
-                    put("name", group.name)
-                    val jsonIds = JSONArray()
-                    group.fixtureIds.forEach { jsonIds.put(it) }
-                    put("fixtureIds", jsonIds)
-                }
-                jsonGroupsArray.put(jsonGroup)
-            }
-            jsonObject.put("fixtureGroups", jsonGroupsArray)
-
-            // 4. SALVATAGGIO SCENE E CUE POINT
-            val jsonScenesArray = JSONArray()
-            for (scene in showfile.scenes) {
-                val jsonScene = JSONObject()
-                jsonScene.put("sceneName", scene.name)
-
-                val jsonCueList = JSONArray()
-                for (cue in scene.cueList) {
-                    val jsonCue = JSONObject().apply {
-                        put("number", cue.number.toDouble())
-                        put("name", cue.name)
-                        put("fadeTimeMs", cue.fadeTimeMs)
-
-                        val jsonDmxArray = JSONArray()
-                        cue.dmxValues.forEach { jsonDmxArray.put(it) }
-                        put("dmxValues", jsonDmxArray)
-                    }
-                    jsonCueList.put(jsonCue)
-                }
-                jsonScene.put("cueList", jsonCueList)
-                jsonScenesArray.put(jsonScene)
-            }
-            jsonObject.put("scenes", jsonScenesArray)
-
+            val jsonString = serializeShow(showfile)
             val file = File(context.filesDir, "${showfile.showName}.json")
-            file.writeText(jsonObject.toString(4))
+            file.writeText(jsonString)
             true
         } catch (e: Exception) {
-            Log.e("ShowRepository", "Errore salvataggio con gruppi", e)
+            Log.e("ShowRepository", "Errore salvataggio showfile", e)
             false
         }
+    }
+
+    fun serializeShow(showfile: Showfile): String {
+        val jsonObject = JSONObject()
+        jsonObject.put("showName", showfile.showName)
+        jsonObject.put("version", showfile.version)
+
+        // 1. SALVATAGGIO PROFILI
+        val jsonProfilesArray = JSONArray()
+        for (profile in showfile.customProfiles) {
+            val jsonProfile = JSONObject().apply {
+                put("id", profile.id)
+                put("manufacturer", profile.manufacturer)
+                put("modelName", profile.modelName)
+                put("channelCount", profile.channelCount)
+
+                val jsonChannels = JSONArray()
+                for (ch in profile.channels) {
+                    val jsonCh = JSONObject().apply {
+                        put("offset", ch.offset)
+                        put("name", ch.name)
+                        put("hasPresets", ch.hasPresets)
+                        put("type", ch.type.name)
+
+                        val jsonPresets = JSONArray()
+                        for (preset in ch.presets) {
+                            val jsonPreset = JSONObject().apply {
+                                put("from", preset.from)
+                                put("to", preset.to)
+                                put("label", preset.label)
+                            }
+                            jsonPresets.put(jsonPreset)
+                        }
+                        put("presets", jsonPresets)
+                    }
+                    jsonChannels.put(jsonCh)
+                }
+                put("channels", jsonChannels)
+            }
+            jsonProfilesArray.put(jsonProfile)
+        }
+        jsonObject.put("customProfiles", jsonProfilesArray)
+
+        // 2. SALVATAGGIO PATCH
+        val jsonInstancesArray = JSONArray()
+        for (instance in showfile.fixtureInstances) {
+            val jsonInstance = JSONObject().apply {
+                put("id", instance.id)
+                put("userGivenName", instance.userGivenName)
+                put("profileId", instance.profileId)
+                put("startAddress", instance.startAddress)
+            }
+            jsonInstancesArray.put(jsonInstance)
+        }
+        jsonObject.put("fixtureInstances", jsonInstancesArray)
+
+        // 3. SALVATAGGIO GRUPPI
+        val jsonGroupsArray = JSONArray()
+        for (group in showfile.fixtureGroups) {
+            val jsonGroup = JSONObject().apply {
+                put("id", group.id)
+                put("name", group.name)
+                val jsonIds = JSONArray()
+                group.fixtureIds.forEach { jsonIds.put(it) }
+                put("fixtureIds", jsonIds)
+            }
+            jsonGroupsArray.put(jsonGroup)
+        }
+        jsonObject.put("fixtureGroups", jsonGroupsArray)
+
+        // 4. SALVATAGGIO SCENE E CUE
+        val jsonScenesArray = JSONArray()
+        for (scene in showfile.scenes) {
+            val jsonScene = JSONObject()
+            jsonScene.put("sceneName", scene.name)
+
+            val jsonCueList = JSONArray()
+            for (cue in scene.cueList) {
+                val jsonCue = JSONObject().apply {
+                    put("number", cue.number.toDouble())
+                    put("name", cue.name)
+                    put("fadeTimeMs", cue.fadeTimeMs)
+
+                    val jsonDmxArray = JSONArray()
+                    cue.dmxValues.forEach { jsonDmxArray.put(it) }
+                    put("dmxValues", jsonDmxArray)
+                }
+                jsonCueList.put(jsonCue)
+            }
+            jsonScene.put("cueList", jsonCueList)
+            jsonScenesArray.put(jsonScene)
+        }
+        jsonObject.put("scenes", jsonScenesArray)
+        
+        return jsonObject.toString(4)
     }
 
     fun loadShowfile(showName: String): Showfile? {
         return try {
             val file = File(context.filesDir, "$showName.json")
             if (!file.exists()) return null
+            deserializeShow(file.readText())
+        } catch (e: Exception) {
+            Log.e("ShowRepository", "Errore caricamento showfile", e)
+            null
+        }
+    }
 
-            val jsonString = file.readText()
+    fun deserializeShow(jsonString: String): Showfile? {
+        return try {
             val jsonObject = JSONObject(jsonString)
             val name = jsonObject.getString("showName")
             val version = jsonObject.getInt("version")
@@ -159,7 +171,7 @@ class ShowRepository(private val context: Context) {
                 }
             }
 
-            // 3. NUOVO: CARICAMENTO GRUPPI
+            // 3. CARICAMENTO GRUPPI
             val fixtureGroups = mutableListOf<FixtureGroup>()
             if (jsonObject.has("fixtureGroups")) {
                 val jsonGroups = jsonObject.getJSONArray("fixtureGroups")
@@ -202,7 +214,7 @@ class ShowRepository(private val context: Context) {
 
             Showfile(showName = name, version = version, fixtureInstances = fixtureInstances, customProfiles = customProfiles, fixtureGroups = fixtureGroups, scenes = sceneList)
         } catch (e: Exception) {
-            Log.e("ShowRepository", "Errore caricamento con gruppi", e)
+            Log.e("ShowRepository", "Errore deserializzazione showfile", e)
             null
         }
     }

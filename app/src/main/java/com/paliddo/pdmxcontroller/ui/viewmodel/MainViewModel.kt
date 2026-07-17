@@ -77,6 +77,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _userFixtureProfiles = MutableStateFlow<List<FixtureProfile>>(emptyList())
     val userFixtureProfiles: StateFlow<List<FixtureProfile>> = _userFixtureProfiles.asStateFlow()
 
+    private val _backupStatus = MutableStateFlow<String?>(null)
+    val backupStatus: StateFlow<String?> = _backupStatus.asStateFlow()
+
     private var artNetService: ArtNetForegroundService? = null
     private var isBound = false
     private var networkSendJob: Job? = null
@@ -470,4 +473,45 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         libraryRepository.saveUserProfiles(updatedList)
         updateDimmerMap()
     }
+
+    fun exportShow(uri: android.net.Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val json = repository.serializeShow(_currentShow.value)
+                getApplication<Application>().contentResolver.openOutputStream(uri)?.use { 
+                    it.write(json.toByteArray())
+                }
+                _backupStatus.value = "Esportazione completata con successo"
+            } catch (e: Exception) {
+                _backupStatus.value = "Errore durante l'esportazione: ${e.message}"
+            }
+        }
+    }
+
+    fun importShow(uri: android.net.Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val json = getApplication<Application>().contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                if (json != null) {
+                    repository.deserializeShow(json)?.let { importedShow ->
+                        val existing = repository.getAvailableShows()
+                        var finalName = importedShow.showName
+                        if (existing.contains(finalName)) {
+                            finalName = "${finalName}_Imported_${System.currentTimeMillis() % 1000}"
+                        }
+                        val showToSave = importedShow.copy(showName = finalName)
+                        repository.saveShowfile(showToSave)
+                        refreshShowList()
+                        _backupStatus.value = "Show '$finalName' importato correttamente"
+                    } ?: run {
+                        _backupStatus.value = "File non valido o corrotto"
+                    }
+                }
+            } catch (e: Exception) {
+                _backupStatus.value = "Errore durante l'importazione: ${e.message}"
+            }
+        }
+    }
+
+    fun clearBackupStatus() { _backupStatus.value = null }
 }

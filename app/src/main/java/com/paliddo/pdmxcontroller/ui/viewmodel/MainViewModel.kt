@@ -9,6 +9,7 @@ import android.os.IBinder
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.paliddo.pdmxcontroller.data.model.*
+import com.paliddo.pdmxcontroller.data.repository.FixtureLibraryRepository
 import com.paliddo.pdmxcontroller.data.repository.ShowRepository
 import com.paliddo.pdmxcontroller.network.ArtNetForegroundService
 import kotlinx.coroutines.Dispatchers
@@ -25,6 +26,7 @@ import com.paliddo.pdmxcontroller.data.repository.DefaultFixtureLibrary
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = ShowRepository(application)
+    private val libraryRepository = FixtureLibraryRepository(application)
 
     private val _dmxState = MutableStateFlow(ByteArray(512))
     val dmxState: StateFlow<ByteArray> = _dmxState.asStateFlow()
@@ -111,6 +113,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         loadNetworkSettings()
+        loadGlobalUserProfiles()
         val intent = Intent(application, ArtNetForegroundService::class.java)
         application.startService(intent)
         application.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
@@ -126,6 +129,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val uni = prefs.getInt("universe", 0)
         val auto = prefs.getBoolean("auto_connect", true)
         _networkSettings.value = NetworkSettings(ip, port, uni, auto)
+    }
+
+    private fun loadGlobalUserProfiles() {
+        _userFixtureProfiles.value = libraryRepository.loadUserProfiles()
     }
 
     fun updateNetworkSettings(newSettings: NetworkSettings) {
@@ -451,8 +458,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun addUserFixtureProfile(profile: FixtureProfile) {
-        val updatedList = _userFixtureProfiles.value + profile
+        val updatedList = _userFixtureProfiles.value.filter { it.id != profile.id } + profile
         _userFixtureProfiles.value = updatedList
+        libraryRepository.saveUserProfiles(updatedList)
+        updateDimmerMap()
+    }
+
+    fun removeUserFixtureProfile(profileId: String) {
+        val updatedList = _userFixtureProfiles.value.filter { it.id != profileId }
+        _userFixtureProfiles.value = updatedList
+        libraryRepository.saveUserProfiles(updatedList)
         updateDimmerMap()
     }
 }

@@ -15,12 +15,17 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 class ArtNetForegroundService : Service() {
 
     private val binder = LocalBinder()
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var artNetService = ArtNetService()
+
+    /** ConnectionManager per la state machine della connessione */
+    val connectionManager = ConnectionManager(serviceScope)
 
     private var wakeLock: PowerManager.WakeLock? = null
     private var connectionJob: Job? = null
@@ -41,6 +46,9 @@ class ArtNetForegroundService : Service() {
     // Stato di handshake reale esposto al ViewModel
     val isControllerAlive = MutableStateFlow(false)
     val controllerInfo = MutableStateFlow<com.paliddo.pdmxcontroller.data.model.ControllerInfo?>(null)
+    
+    /** Espone lo stato della connessione dal ConnectionManager */
+    val connectionState: StateFlow<ConnectionState> get() = connectionManager.connectionState
 
     inner class LocalBinder : Binder() {
         fun getService(): ArtNetForegroundService = this@ArtNetForegroundService
@@ -56,11 +64,22 @@ class ArtNetForegroundService : Service() {
         
         if (!isConnectionEnabled && enabled) {
             isConnectionEnabled = enabled
+            // Se lo stato è Idle o Disconnected, avvia connessione tramite ConnectionManager
+            val state = connectionManager.connectionState.value
+            if (state is ConnectionState.Idle || state is ConnectionState.Disconnected || state is ConnectionState.DiscoveryFailed || state is ConnectionState.Error) {
+                connectionManager.connect(ip)
+            }
             startNetworkLoop() 
         } else {
             isConnectionEnabled = enabled
-            if (ipChanged && isConnectionEnabled) {
+            if (!enabled) {
+                // Disconnessione esplicita
+                connectionManager.disconnect()
                 connectionJob?.cancel()
+                isControllerAlive.value = false
+            } else if (ipChanged && isConnectionEnabled) {
+                connectionJob?.cancel()
+                connectionManager.connect(ip)
                 startNetworkLoop()
             }
         }
@@ -84,7 +103,34 @@ class ArtNetForegroundService : Service() {
         }
 
         setupNetworkBinding()
-        startNetworkLoop()
+        
+        // Colleghiamo il ConnectionManager allo stato del controller
+        connectionManager.onStateChanged = { state ->
+            when (state) {
+                is ConnectionState.Connected -> {
+                    isControllerAlive.value = true
+                    // Avvia lo streaming DMX se non già attivo
+                    if (connectionJob?.isActive != true) {
+                        startNetworkLoop()
+                    }
+                }
+                is ConnectionState.Disconnected -> {
+                    isControllerAlive.value = false
+                    controllerInfo.value = null
+                }
+                is ConnectionState.Error -> {
+                    isControllerAlive.value = false
+                    controllerInfo.value = null
+                }
+                else -> {}
+            }
+        }
+        
+        // Avvia connessione automaticamente se abilitato
+        if (isConnectionEnabled) {
+            connectionManager.connect(targetIp)
+            startNetworkLoop()
+        }
     }
 
     /**
@@ -127,9 +173,22 @@ class ArtNetForegroundService : Service() {
         })
     }
 
+    fun connectToController(ip: String = targetIp) {
+        isConnectionEnabled = true
+        connectionManager.connect(ip)
+    }
+
+    fun disconnectFromController() {
+        isConnectionEnabled = false
+        connectionManager.disconnect()
+        connectionJob?.cancel()
+        isControllerAlive.value = false
+        controllerInfo.value = null
+    }
+
     fun sendUpdate(channelIndex: Int, value: Byte) {
         dmxData[channelIndex] = value
-        if (isConnectionEnabled) {
+        if (isConnectionEnabled && connectionManager.connectionState.value is ConnectionState.Connected) {
             serviceScope.launch {
                 artNetService.sendArtDmx(targetIp, universe, dmxData, port)
             }
@@ -146,12 +205,14 @@ class ArtNetForegroundService : Service() {
         connectionJob = serviceScope.launch {
             Log.d("ArtNetService", "Inizio loop di rete verso $targetIp:$port")
             
-            // --- JOB 1: STREAMING DMX E WAKE-UP (Priorità Alta) ---
+            // --- JOB 1: STREAMING DMX (Priorità Alta) ---
             val dmxJob = launch {
-                // Wake-up iniziale
-                repeat(10) {
-                    artNetService.sendWakeUpHandshake(targetIp, port)
-                    delay(100)
+                // Aspetta che il ConnectionManager stabilisca la connessione
+                while (isActive && isConnectionEnabled) {
+                    if (connectionManager.connectionState.value is ConnectionState.Connected) {
+                        break
+                    }
+                    delay(200)
                 }
                 
                 while (isActive && isConnectionEnabled) {
@@ -218,6 +279,7 @@ class ArtNetForegroundService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         connectionJob?.cancel()
+        connectionManager.destroy()
         serviceScope.cancel()
         artNetService.close()
         if (wakeLock?.isHeld == true) wakeLock?.release()

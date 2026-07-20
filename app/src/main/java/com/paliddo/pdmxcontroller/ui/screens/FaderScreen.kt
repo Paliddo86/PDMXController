@@ -45,6 +45,8 @@ import androidx.compose.ui.unit.sp
 import com.paliddo.pdmxcontroller.data.model.*
 import com.paliddo.pdmxcontroller.ui.screens.components.CreateOrCopySceneDialog
 import com.paliddo.pdmxcontroller.ui.screens.components.CreateOrCopyShowDialog
+import com.paliddo.pdmxcontroller.network.ConnectionState
+import com.paliddo.pdmxcontroller.ui.screens.components.ConnectionPanel
 import com.paliddo.pdmxcontroller.ui.screens.components.ProfileSelectorDialog
 import com.paliddo.pdmxcontroller.ui.viewmodel.MainViewModel
 import kotlinx.coroutines.delay
@@ -200,6 +202,7 @@ fun FaderScreen(viewModel: MainViewModel) {
     val colorPurple = Color(0xFF9D4EDD)
     val colorCyan = Color(0xFF00B4D8)
     val colorDisconnected = Color(0xFFEF4444)
+    val colorOrange = Color(0xFFF59E0B)
     val colorGreenLive = Color(0xFF10B981)
 
     // --- INTERFACCIA PRINCIPALE ---
@@ -330,58 +333,97 @@ fun FaderScreen(viewModel: MainViewModel) {
                         Spacer(modifier = Modifier.width(12.dp))
                         Box(modifier = Modifier.weight(1f).fillMaxHeight().background(colorSurface, RoundedCornerShape(8.dp)).padding(20.dp)) {
                             when (currentSettingsTab) {
-                                "CONTROLLER" -> Column(modifier = Modifier.fillMaxSize().padding(10.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                "CONTROLLER" -> Column(modifier = Modifier.fillMaxSize()) {
                                     val netSettings by viewModel.networkSettings.collectAsState()
-                                    Text("CONFIGURAZIONE ART-NET", color = colorCyan, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                        Column {
-                                            Text("Connessione Automatica", color = colorTextPrimary, fontWeight = FontWeight.Bold)
-                                            Text("Avvia lo streaming all'apertura dell'app", color = colorTextPrimary.copy(0.5f), fontSize = 11.sp)
+                                    val connState by viewModel.connectionState.collectAsState()
+                                    val connLog by viewModel.connectionLog.collectAsState()
+
+                                    // Sezione CONNESSIONE (ConnectionPanel)
+                                    ConnectionPanel(
+                                        connectionState = connState,
+                                        connectionLog = connLog,
+                                        networkIp = netSettings.ipAddress,
+                                        onConnect = { viewModel.connectToController() },
+                                        onDisconnect = { viewModel.disconnectFromController() },
+                                        onScan = { viewModel.scanForControllers() },
+                                        onSetIp = { ip -> viewModel.connectToControllerAt(ip) },
+                                        onClearLog = { viewModel.clearConnectionLog() },
+                                        modifier = Modifier.weight(1f)
+                                    )
+
+                                    HorizontalDivider(color = colorSurfaceAccent, thickness = 1.dp, modifier = Modifier.padding(vertical = 8.dp))
+
+                                    // Sezione CONFIGURAZIONE RETE (compatto)
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 4.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text("CONFIG. ART-NET", color = colorCyan, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+
+                                        // Auto-Connect Switch
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column {
+                                                Text("Auto-Connect", color = colorTextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                Text("Connetti all'avvio", color = colorTextPrimary.copy(0.5f), fontSize = 10.sp)
+                                            }
+                                            Switch(
+                                                checked = netSettings.autoConnect,
+                                                onCheckedChange = { viewModel.updateNetworkSettings(netSettings.copy(autoConnect = it)) },
+                                                colors = SwitchDefaults.colors(
+                                                    checkedThumbColor = colorCyan,
+                                                    checkedTrackColor = colorCyan.copy(0.3f)
+                                                )
+                                            )
                                         }
-                                        Switch(checked = netSettings.autoConnect, onCheckedChange = { viewModel.updateNetworkSettings(netSettings.copy(autoConnect = it)) }, colors = SwitchDefaults.colors(checkedThumbColor = colorCyan, checkedTrackColor = colorCyan.copy(0.3f)))
-                                    }
-                                    HorizontalDivider(color = colorSurfaceAccent, thickness = 1.dp)
-                                    Text("Indirizzo IP Controller:", color = colorTextPrimary.copy(0.6f), fontSize = 12.sp)
-                                    OutlinedTextField(value = netSettings.ipAddress, onValueChange = { viewModel.updateNetworkSettings(netSettings.copy(ipAddress = it)) }, textStyle = TextStyle(color = colorTextPrimary), modifier = Modifier.fillMaxWidth(), singleLine = true, colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = colorSurfaceAccent, focusedBorderColor = colorCyan))
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        Column(modifier = Modifier.weight(0.5f)) {
-                                            Text("Porta Art-Net:", color = colorTextPrimary.copy(0.6f), fontSize = 12.sp)
-                                            OutlinedTextField(value = netSettings.port.toString(), onValueChange = { val p = it.toIntOrNull() ?: 6454; viewModel.updateNetworkSettings(netSettings.copy(port = p)) }, textStyle = TextStyle(color = colorTextPrimary), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = colorSurfaceAccent, focusedBorderColor = colorCyan))
-                                        }
-                                        Column(modifier = Modifier.weight(0.5f)) {
-                                            Text("Universo (Sub/Net):", color = colorTextPrimary.copy(0.6f), fontSize = 12.sp)
-                                            OutlinedTextField(value = netSettings.universe.toString(), onValueChange = { val u = it.toIntOrNull() ?: 0; viewModel.updateNetworkSettings(netSettings.copy(universe = u)) }, textStyle = TextStyle(color = colorTextPrimary), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = colorSurfaceAccent, focusedBorderColor = colorCyan))
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.height(10.dp))
-                                    Button(onClick = { viewModel.updateNetworkSettings(netSettings.copy(autoConnect = true)) }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = colorPurple)) { Text("FORZA RICONNESSIONE", fontWeight = FontWeight.Bold) }
-                                    
-                                    LaunchedEffect(isConnected) {
-                                        if (!isConnected && netSettings.autoConnect) {
-                                            delay(5000)
-                                            if (!isConnected) showConnectionErrorDialog = true
+
+                                        // Porta e Universo
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text("Porta:", color = colorTextPrimary.copy(0.6f), fontSize = 11.sp)
+                                                OutlinedTextField(
+                                                    value = netSettings.port.toString(),
+                                                    onValueChange = { val p = it.toIntOrNull() ?: 6454; viewModel.updateNetworkSettings(netSettings.copy(port = p)) },
+                                                    textStyle = TextStyle(color = colorTextPrimary, fontSize = 13.sp),
+                                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                                    singleLine = true,
+                                                    colors = OutlinedTextFieldDefaults.colors(
+                                                        unfocusedBorderColor = colorSurfaceAccent,
+                                                        focusedBorderColor = colorCyan
+                                                    ),
+                                                    modifier = Modifier.height(50.dp)
+                                                )
+                                            }
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text("Universo:", color = colorTextPrimary.copy(0.6f), fontSize = 11.sp)
+                                                OutlinedTextField(
+                                                    value = netSettings.universe.toString(),
+                                                    onValueChange = { val u = it.toIntOrNull() ?: 0; viewModel.updateNetworkSettings(netSettings.copy(universe = u)) },
+                                                    textStyle = TextStyle(color = colorTextPrimary, fontSize = 13.sp),
+                                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                                    singleLine = true,
+                                                    colors = OutlinedTextFieldDefaults.colors(
+                                                        unfocusedBorderColor = colorSurfaceAccent,
+                                                        focusedBorderColor = colorCyan
+                                                    ),
+                                                    modifier = Modifier.height(50.dp)
+                                                )
+                                            }
                                         }
                                     }
 
-                                    Spacer(modifier = Modifier.height(10.dp))
-                                    val details by viewModel.controllerDetails.collectAsState()
-                                    Card(colors = CardDefaults.cardColors(containerColor = if (isConnected) colorGreenLive.copy(0.1f) else colorDisconnected.copy(0.1f)), modifier = Modifier.fillMaxWidth(), border = BorderStroke(1.dp, if (isConnected) colorGreenLive else colorDisconnected)) {
-                                        Column(modifier = Modifier.padding(16.dp)) {
-                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
-                                                Box(modifier = Modifier.size(10.dp).background(if (isConnected) colorGreenLive else colorDisconnected, CircleShape))
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Text(text = if (isConnected) "CONTROLLER ONLINE" else "CONTROLLER OFFLINE", color = if (isConnected) colorGreenLive else colorDisconnected, fontWeight = FontWeight.Bold)
-                                            }
-                                            if (isConnected && details != null) {
-                                                Spacer(modifier = Modifier.height(12.dp))
-                                                HorizontalDivider(color = colorGreenLive.copy(alpha = 0.2f))
-                                                Spacer(modifier = Modifier.height(12.dp))
-                                                DetailRow("Nome:", details?.shortName ?: "-")
-                                                DetailRow("Modello:", details?.longName ?: "-")
-                                                DetailRow("IP:", details?.ipAddress ?: "-")
-                                                DetailRow("Firmware:", details?.firmwareVersion ?: "-")
-                                                DetailRow("Stato:", details?.status ?: "OK")
-                                            }
+                                    LaunchedEffect(isConnected) {
+                                        if (!isConnected && netSettings.autoConnect && connState is ConnectionState.Idle) {
+                                            delay(3000)
+                                            if (!isConnected) showConnectionErrorDialog = true
                                         }
                                     }
                                 }
@@ -635,10 +677,21 @@ fun FaderScreen(viewModel: MainViewModel) {
                                         DropdownMenuItem(text = { Text("+ Nuova Scena", color = colorCyan) }, onClick = { createSceneDialogOpened = true; sceneMenuExpanded = false })
                                     }
                                 }
+                                val connState by viewModel.connectionState.collectAsState()
+                                val (statusColor, statusLabel) = when (connState) {
+                                    is ConnectionState.Connected -> colorGreenLive to "ARTNET"
+                                    is ConnectionState.Scanning -> colorOrange to "SCAN..."
+                                    is ConnectionState.Connecting -> colorOrange to "CONN..."
+                                    is ConnectionState.Handshaking -> colorOrange to "HANDSHAKE"
+                                    is ConnectionState.Disconnected -> colorDisconnected to "OFFLINE"
+                                    is ConnectionState.Error -> colorDisconnected to "ERRORE"
+                                    is ConnectionState.DiscoveryFailed -> colorDisconnected to "NON TROVATO"
+                                    is ConnectionState.Idle -> colorDisconnected to "OFFLINE"
+                                }
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(modifier = Modifier.size(8.dp).background(if (isConnected) colorGreenLive else colorDisconnected, CircleShape))
+                                    Box(modifier = Modifier.size(8.dp).background(statusColor, CircleShape))
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text(text = if (isConnected) "ARTNET" else "OFFLINE", color = if (isConnected) colorGreenLive else colorDisconnected, fontSize = 9.sp)
+                                    Text(text = statusLabel, color = statusColor, fontSize = 9.sp)
                                 }
                             }
 

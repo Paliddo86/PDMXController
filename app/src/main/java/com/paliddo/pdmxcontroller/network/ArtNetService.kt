@@ -8,8 +8,8 @@ import java.net.InetAddress
 
 class ArtNetService {
     private var socket: DatagramSocket? = null
-    // Buffer impostato a 530 byte per compatibilità esatta con ESP32
-    private val buffer = ByteArray(530)
+    // Buffer per pacchetto Art-Net standard: 18 header + 1 Start Code + 512 dati = 531 byte
+    private val buffer = ByteArray(531)
     private val pollBuffer = ByteArray(14)
 
     init {
@@ -32,10 +32,11 @@ class ArtNetService {
         buffer[11] = 14   // Version LSB
         buffer[12] = 0x00 // Sequence
         buffer[13] = 0x00 // Physical
+        buffer[18] = 0x00 // Start Code (standard Art-Net, sempre 0x00 per DMX512)
     }
 
     private fun setupPollHeader() {
-        val header = byteArrayOf('A'.code.toByte(), 'r'.code.toByte(), 't'.code.toByte(), '-'.code.toByte(), 'N'.code.toByte(), 'e'.code.toByte(), 't'.toByte(), 0)
+        val header = byteArrayOf('A'.code.toByte(), 'r'.code.toByte(), 't'.code.toByte(), '-'.code.toByte(), 'N'.code.toByte(), 'e'.code.toByte(), 't'.code.toByte(), 0)
         System.arraycopy(header, 0, pollBuffer, 0, 8)
         pollBuffer[8] = 0x00  // ArtPoll
         pollBuffer[9] = 0x20
@@ -48,14 +49,15 @@ class ArtNetService {
         try {
             buffer[14] = (universe and 0xFF).toByte()
             buffer[15] = ((universe shr 8) and 0xFF).toByte()
-            buffer[16] = 0x02 // Length 512 MSB
-            buffer[17] = 0x00 // Length 512 LSB
+            buffer[16] = 0x02 // Length MSB (512 dati + 1 Start Code = 513)
+            buffer[17] = 0x01 // Length LSB
 
-            System.arraycopy(dmxData, 0, buffer, 18, 512)
+            // Copia i 512 byte DMX dopo lo Start Code (byte 18 = 0x00, dati dal byte 19)
+            System.arraycopy(dmxData, 0, buffer, 19, 512)
 
             val address = InetAddress.getByName(ipAddress)
-            // Inviamo esattamente 530 byte
-            val packet = DatagramPacket(buffer, 530, address, port)
+            // Inviamo 531 byte: 18 header + 1 Start Code + 512 dati = 531
+            val packet = DatagramPacket(buffer, 531, address, port)
             socket?.send(packet)
         } catch (e: Exception) {
             Log.e("ArtNetService", "DMX Error: ${e.message}")

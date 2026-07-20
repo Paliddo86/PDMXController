@@ -12,6 +12,8 @@ import com.paliddo.pdmxcontroller.data.model.*
 import com.paliddo.pdmxcontroller.data.repository.FixtureLibraryRepository
 import com.paliddo.pdmxcontroller.data.repository.ShowRepository
 import com.paliddo.pdmxcontroller.network.ArtNetForegroundService
+import com.paliddo.pdmxcontroller.network.ConnectionManager
+import com.paliddo.pdmxcontroller.network.ConnectionState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -36,6 +38,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _controllerDetails = MutableStateFlow<ControllerInfo?>(null)
     val controllerDetails: StateFlow<ControllerInfo?> = _controllerDetails.asStateFlow()
+
+    /** Stato connessione avanzato dal ConnectionManager */
+    private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Idle)
+    val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
 
     private val _currentShow = MutableStateFlow(Showfile("Default_Show"))
     val currentShow: StateFlow<Showfile> = _currentShow.asStateFlow()
@@ -80,6 +86,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _backupStatus = MutableStateFlow<String?>(null)
     val backupStatus: StateFlow<String?> = _backupStatus.asStateFlow()
 
+    private val _connectionLog = MutableStateFlow<List<String>>(emptyList())
+    val connectionLog: StateFlow<List<String>> = _connectionLog.asStateFlow()
+
     private var artNetService: ArtNetForegroundService? = null
     private var isBound = false
     private var networkSendJob: Job? = null
@@ -109,6 +118,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             serviceConnectionJob = viewModelScope.launch {
                 launch { activeService.isControllerAlive.collect { _isControllerConnected.value = it } }
                 launch { activeService.controllerInfo.collect { _controllerDetails.value = it } }
+                launch { activeService.connectionState.collect { state ->
+                    _connectionState.value = state
+                    // Aggiungi log solo per stati significativi
+                    when (state) {
+                        is ConnectionState.Connected -> addConnectionLog("✅ Connesso a ${state.targetIp}")
+                        is ConnectionState.Disconnected -> addConnectionLog("❌ Disconnesso: ${state.reason}")
+                        is ConnectionState.Error -> addConnectionLog("⚠️ Errore: ${state.message}")
+                        is ConnectionState.Handshaking -> addConnectionLog("🔄 Handshake con ${state.targetIp} (tentativo ${state.attempt})")
+                        is ConnectionState.DiscoveryFailed -> addConnectionLog("🔍 Nessun controller trovato sulla rete")
+                        else -> {}
+                    }
+                } }
             }
         }
         override fun onServiceDisconnected(name: ComponentName?) { artNetService = null; isBound = false; _isControllerConnected.value = false }
@@ -123,6 +144,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         refreshShowList()
         val salvati = repository.getAvailableShows()
         if (salvati.isNotEmpty()) loadShow(salvati.first()) else createNewShow("Default_Show")
+    }
+
+    private fun addConnectionLog(message: String) {
+        val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.ITALY).format(java.util.Date())
+        val entry = "[$timestamp] $message"
+        _connectionLog.value = (_connectionLog.value + entry).takeLast(50) // Mantieni ultimi 50 log
     }
 
     private fun loadNetworkSettings() {
@@ -149,6 +176,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             apply()
         }
         artNetService?.updateSettings(newSettings.ipAddress, newSettings.port, newSettings.universe, newSettings.autoConnect)
+    }
+
+    // ==========================================
+    // CONTROLLI CONNESSIONE ESPLICITA
+    // ==========================================
+    fun connectToController() {
+        addConnectionLog("🚀 Avvio connessione...")
+        artNetService?.connectToController(_networkSettings.value.ipAddress)
+    }
+
+    fun connectToControllerAt(ip: String) {
+        val newSettings = _networkSettings.value.copy(ipAddress = ip)
+        updateNetworkSettings(newSettings)
+        addConnectionLog("🚀 Connessione a $ip...")
+        artNetService?.connectToController(ip)
+    }
+
+    fun disconnectFromController() {
+        addConnectionLog("⏹️ Disconnessione in corso...")
+        artNetService?.disconnectFromController()
+    }
+
+    fun reconnectToController() {
+        addConnectionLog("🔄 Riconnessione...")
+        artNetService?.connectionManager?.reconnect()
+    }
+
+    fun scanForControllers() {
+        addConnectionLog("🔍 Scansione rete in corso...")
+        artNetService?.connectionManager?.connect() // Discovery automatico
+    }
+
+    fun clearConnectionLog() {
+        _connectionLog.value = emptyList()
     }
 
     fun toggleLiveMode() { _isLiveMode.value = !_isLiveMode.value }

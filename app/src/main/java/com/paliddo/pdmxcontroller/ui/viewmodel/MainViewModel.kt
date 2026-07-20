@@ -113,6 +113,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val s = _networkSettings.value
             activeService.updateSettings(s.ipAddress, s.port, s.universe, s.autoConnect)
             
+            // Quando ci colleghiamo al servizio, salviamo lo show con i profili libreria
+            val currentProfiles = _userFixtureProfiles.value
+            val currentShowVal = _currentShow.value
+            if (currentProfiles.isNotEmpty()) {
+                repository.saveShowfileWithLibrary(currentShowVal, currentProfiles)
+            }
+
             _dmxState.value = activeService.dmxData.clone()
             serviceConnectionJob?.cancel()
             serviceConnectionJob = viewModelScope.launch {
@@ -560,6 +567,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val updatedList = _userFixtureProfiles.value.filter { it.id != profile.id } + profile
         _userFixtureProfiles.value = updatedList
         libraryRepository.saveUserProfiles(updatedList)
+        // Salva lo show corrente con i profili aggiornati
+        repository.saveShowfileWithLibrary(_currentShow.value, updatedList)
         updateDimmerMap()
     }
 
@@ -567,7 +576,49 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val updatedList = _userFixtureProfiles.value.filter { it.id != profileId }
         _userFixtureProfiles.value = updatedList
         libraryRepository.saveUserProfiles(updatedList)
+        repository.saveShowfileWithLibrary(_currentShow.value, updatedList)
         updateDimmerMap()
+    }
+
+    // ==========================================
+    // EXPORT / IMPORT LIBRERIA FIXTURE
+    // ==========================================
+    fun exportFixtureLibrary(uri: android.net.Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val profiles = _userFixtureProfiles.value
+                val success = libraryRepository.exportLibraryToUri(profiles, uri)
+                _backupStatus.value = if (success) {
+                    "Libreria esportata (${profiles.size} profili)"
+                } else {
+                    "Errore durante l'esportazione della libreria"
+                }
+            } catch (e: Exception) {
+                _backupStatus.value = "Errore export libreria: ${e.message}"
+            }
+        }
+    }
+
+    fun importFixtureLibrary(uri: android.net.Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val importedProfiles = libraryRepository.importLibraryFromUri(uri)
+                if (importedProfiles != null) {
+                    // Unisci con i profili esistenti (sovrascrive duplicati per id)
+                    val existingIds = _userFixtureProfiles.value.map { it.id }.toSet()
+                    val newProfiles = importedProfiles.filter { it.id !in existingIds }
+                    val updatedList = _userFixtureProfiles.value + newProfiles
+                    _userFixtureProfiles.value = updatedList
+                    libraryRepository.saveUserProfiles(updatedList)
+                    repository.saveShowfileWithLibrary(_currentShow.value, updatedList)
+                    _backupStatus.value = "Importati ${newProfiles.size} nuovi profili (${importedProfiles.size - newProfiles.size} già presenti)"
+                } else {
+                    _backupStatus.value = "File non valido o vuoto"
+                }
+            } catch (e: Exception) {
+                _backupStatus.value = "Errore import libreria: ${e.message}"
+            }
+        }
     }
 
     fun applyColorToSelected(fixtureIds: List<String>, r: Int, g: Int, b: Int) {
@@ -613,7 +664,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun exportShow(uri: android.net.Uri) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val json = repository.serializeShow(_currentShow.value)
+                // Includi i profili della libreria globale usati dalle fixture dello show
+                val json = repository.serializeShow(_currentShow.value, _userFixtureProfiles.value)
                 getApplication<Application>().contentResolver.openOutputStream(uri)?.use { 
                     it.write(json.toByteArray())
                 }

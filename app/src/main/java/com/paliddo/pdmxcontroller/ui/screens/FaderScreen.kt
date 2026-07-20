@@ -432,8 +432,51 @@ fun FaderScreen(viewModel: MainViewModel) {
                                     val factoryProfiles = remember { com.paliddo.pdmxcontroller.data.repository.DefaultFixtureLibrary.profiles }
                                     val allLibraryProfiles = remember(userProfiles) { factoryProfiles + userProfiles }
 
+                                    // Launcher per export/import libreria
+                                    val exportLibLauncher = rememberLauncherForActivityResult(
+                                        contract = ActivityResultContracts.CreateDocument("application/json")
+                                    ) { uri ->
+                                        uri?.let { viewModel.exportFixtureLibrary(it) }
+                                    }
+
+                                    val importLibLauncher = rememberLauncherForActivityResult(
+                                        contract = ActivityResultContracts.OpenDocument()
+                                    ) { uri ->
+                                        uri?.let { viewModel.importFixtureLibrary(it) }
+                                    }
+
                                     Text("LIBRERIA FIXTURE", color = colorCyan, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                     Spacer(modifier = Modifier.height(12.dp))
+
+                                    // Pulsanti Export/Import Libreria
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        OutlinedButton(
+                                            onClick = { exportLibLauncher.launch("pdmx_fixture_library.json") },
+                                            modifier = Modifier.weight(1f),
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = colorPurple),
+                                            border = BorderStroke(1.dp, colorPurple)
+                                        ) {
+                                            Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("EXPORT LIBRERIA", fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                        OutlinedButton(
+                                            onClick = { importLibLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
+                                            modifier = Modifier.weight(1f),
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = colorCyan),
+                                            border = BorderStroke(1.dp, colorCyan)
+                                        ) {
+                                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(14.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("IMPORT LIBRERIA", fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text("${userProfiles.size} profili utente, ${factoryProfiles.size} factory", color = colorTextPrimary.copy(0.4f), fontSize = 10.sp)
+                                    Spacer(modifier = Modifier.height(8.dp))
                                     
                                     LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                         items(allLibraryProfiles) { profile ->

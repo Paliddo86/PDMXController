@@ -21,12 +21,19 @@ class ShowRepository(private val context: Context) {
         }
     }
 
-    fun serializeShow(showfile: Showfile): String {
+    /**
+     * Serializza uno showfile includendo una sezione "libraryProfiles" con
+     * i profili della libreria globale effettivamente usati dalle fixture.
+     *
+     * @param showfile lo showfile da serializzare
+     * @param globalLibraryProfiles lista completa dei profili della libreria globale (per includere quelli usati)
+     */
+    fun serializeShow(showfile: Showfile, globalLibraryProfiles: List<FixtureProfile> = emptyList()): String {
         val jsonObject = JSONObject()
         jsonObject.put("showName", showfile.showName)
         jsonObject.put("version", showfile.version)
 
-        // 1. SALVATAGGIO PROFILI
+        // 1. SALVATAGGIO PROFILI CUSTOM DELLO SHOW
         val jsonProfilesArray = JSONArray()
         for (profile in showfile.customProfiles) {
             val jsonProfile = JSONObject().apply {
@@ -61,6 +68,44 @@ class ShowRepository(private val context: Context) {
             jsonProfilesArray.put(jsonProfile)
         }
         jsonObject.put("customProfiles", jsonProfilesArray)
+
+        // 1.1 SALVATAGGIO PROFILI LIBRERIA GLOBALE USATI DALLE FIXTURE
+        val usedProfileIds = showfile.fixtureInstances.map { it.profileId }.toSet()
+        val libraryProfilesUsed = globalLibraryProfiles.filter { it.id in usedProfileIds && showfile.customProfiles.none { cp -> cp.id == it.id } }
+        val jsonLibraryProfilesArray = JSONArray()
+        for (profile in libraryProfilesUsed) {
+            val jsonProfile = JSONObject().apply {
+                put("id", profile.id)
+                put("manufacturer", profile.manufacturer)
+                put("modelName", profile.modelName)
+                put("channelCount", profile.channelCount)
+
+                val jsonChannels = JSONArray()
+                for (ch in profile.channels) {
+                    val jsonCh = JSONObject().apply {
+                        put("offset", ch.offset)
+                        put("name", ch.name)
+                        put("hasPresets", ch.hasPresets)
+                        put("type", ch.type.name)
+
+                        val jsonPresets = JSONArray()
+                        for (preset in ch.presets) {
+                            val jsonPreset = JSONObject().apply {
+                                put("from", preset.from)
+                                put("to", preset.to)
+                                put("label", preset.label)
+                            }
+                            jsonPresets.put(jsonPreset)
+                        }
+                        put("presets", jsonPresets)
+                    }
+                    jsonChannels.put(jsonCh)
+                }
+                put("channels", jsonChannels)
+            }
+            jsonLibraryProfilesArray.put(jsonProfile)
+        }
+        jsonObject.put("libraryProfiles", jsonLibraryProfilesArray)
 
         // 2. SALVATAGGIO PATCH
         val jsonInstancesArray = JSONArray()
@@ -149,8 +194,39 @@ class ShowRepository(private val context: Context) {
             val name = jsonObject.getString("showName")
             val version = jsonObject.getInt("version")
 
-            // 1. CARICAMENTO PROFILI
+            // 1. CARICAMENTO PROFILI CUSTOM DELLO SHOW
             val customProfiles = mutableListOf<FixtureProfile>()
+
+            // 1.1 CARICAMENTO PROFILI LIBRERIA INCLUSI NELL'EXPORT
+            val libraryProfilesInShow = mutableListOf<FixtureProfile>()
+            if (jsonObject.has("libraryProfiles")) {
+                val jsonLibraryProfiles = jsonObject.getJSONArray("libraryProfiles")
+                for (i in 0 until jsonLibraryProfiles.length()) {
+                    val pObj = jsonLibraryProfiles.getJSONObject(i)
+                    val chList = mutableListOf<ChannelDefinition>()
+                    val jsonChs = pObj.getJSONArray("channels")
+
+                    for (j in 0 until jsonChs.length()) {
+                        val cObj = jsonChs.getJSONObject(j)
+                        val preList = mutableListOf<DmxValueRange>()
+                        val jsonPres = cObj.getJSONArray("presets")
+
+                        for (k in 0 until jsonPres.length()) {
+                            val rObj = jsonPres.getJSONObject(k)
+                            preList.add(DmxValueRange(rObj.getInt("from"), rObj.getInt("to"), rObj.getString("label")))
+                        }
+
+                        val typeStr = if (cObj.has("type")) cObj.getString("type") else ChannelType.OTHER.name
+                        val type = try { ChannelType.valueOf(typeStr) } catch (e: Exception) { ChannelType.OTHER }
+
+                        chList.add(ChannelDefinition(cObj.getInt("offset"), cObj.getString("name"), cObj.getBoolean("hasPresets"), preList, type))
+                    }
+                    libraryProfilesInShow.add(FixtureProfile(pObj.getString("id"), pObj.getString("manufacturer"), pObj.getString("modelName"), pObj.getInt("channelCount"), chList))
+                }
+            }
+
+            // Unisci customProfiles con libraryProfilesInShow per compatibilità
+            customProfiles.addAll(libraryProfilesInShow)
             if (jsonObject.has("customProfiles")) {
                 val jsonProfiles = jsonObject.getJSONArray("customProfiles")
                 for (i in 0 until jsonProfiles.length()) {
@@ -250,6 +326,21 @@ class ShowRepository(private val context: Context) {
         } catch (e: Exception) {
             Log.e("ShowRepository", "Errore deserializzazione showfile", e)
             null
+        }
+    }
+
+    /**
+     * Salva lo showfile includendo i profili globali usati.
+     */
+    fun saveShowfileWithLibrary(showfile: Showfile, globalProfiles: List<FixtureProfile>): Boolean {
+        return try {
+            val jsonString = serializeShow(showfile, globalProfiles)
+            val file = File(context.filesDir, "${showfile.showName}.json")
+            file.writeText(jsonString)
+            true
+        } catch (e: Exception) {
+            Log.e("ShowRepository", "Errore salvataggio showfile con libreria", e)
+            false
         }
     }
 

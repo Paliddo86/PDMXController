@@ -79,14 +79,26 @@ data class Scene(
     val cueList: List<Cue> = emptyList()
 )
 
+@Serializable
+data class ColorPalette(
+    val id: String,
+    val name: String,
+    val hexCode: String,
+    val r: Int,
+    val g: Int,
+    val b: Int,
+    val w: Int = 0
+)
+
 // Showfile generale con supporto a Fixture e Gruppi
 @Serializable
 data class Showfile(
     val showName: String,
-    val version: Int = 5,
+    val version: Int = 6,
     val fixtureInstances: List<FixtureInstance> = emptyList(),
     val customProfiles: List<FixtureProfile> = emptyList(),
     val fixtureGroups: List<FixtureGroup> = emptyList(),
+    val colorPalettes: List<ColorPalette> = emptyList(),
     val scenes: List<Scene> = listOf(Scene("Scena Principale"))
 )
 

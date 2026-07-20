@@ -89,6 +89,22 @@ class ShowRepository(private val context: Context) {
         }
         jsonObject.put("fixtureGroups", jsonGroupsArray)
 
+        // 3.1 SALVATAGGIO PALETTE COLORI
+        val jsonPalettesArray = JSONArray()
+        for (palette in showfile.colorPalettes) {
+            val jsonPalette = JSONObject().apply {
+                put("id", palette.id)
+                put("name", palette.name)
+                put("hexCode", palette.hexCode)
+                put("r", palette.r)
+                put("g", palette.g)
+                put("b", palette.b)
+                put("w", palette.w)
+            }
+            jsonPalettesArray.put(jsonPalette)
+        }
+        jsonObject.put("colorPalettes", jsonPalettesArray)
+
         // 4. SALVATAGGIO SCENE E CUE
         val jsonScenesArray = JSONArray()
         for (scene in showfile.scenes) {
@@ -186,6 +202,24 @@ class ShowRepository(private val context: Context) {
                 }
             }
 
+            // 3.1 CARICAMENTO PALETTE COLORI
+            val colorPalettes = mutableListOf<ColorPalette>()
+            if (jsonObject.has("colorPalettes")) {
+                val jsonPalettes = jsonObject.getJSONArray("colorPalettes")
+                for (i in 0 until jsonPalettes.length()) {
+                    val pObj = jsonPalettes.getJSONObject(i)
+                    colorPalettes.add(ColorPalette(
+                        pObj.getString("id"),
+                        pObj.getString("name"),
+                        pObj.getString("hexCode"),
+                        pObj.getInt("r"),
+                        pObj.getInt("g"),
+                        pObj.getInt("b"),
+                        if (pObj.has("w")) pObj.getInt("w") else 0
+                    ))
+                }
+            }
+
             // 4. CARICAMENTO SCENE E CUE
             val jsonScenes = jsonObject.getJSONArray("scenes")
             val sceneList = mutableListOf<Scene>()
@@ -212,7 +246,7 @@ class ShowRepository(private val context: Context) {
                 sceneList.add(Scene(sceneName, cueList))
             }
 
-            Showfile(showName = name, version = version, fixtureInstances = fixtureInstances, customProfiles = customProfiles, fixtureGroups = fixtureGroups, scenes = sceneList)
+            Showfile(showName = name, version = version, fixtureInstances = fixtureInstances, customProfiles = customProfiles, fixtureGroups = fixtureGroups, colorPalettes = colorPalettes, scenes = sceneList)
         } catch (e: Exception) {
             Log.e("ShowRepository", "Errore deserializzazione showfile", e)
             null

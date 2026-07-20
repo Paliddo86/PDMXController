@@ -239,23 +239,43 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun patchMultipleFixtures(baseName: String, profileId: String, startAddress: Int, quantity: Int) {
-        val selectedProfile = getAllAvailableProfiles().find { it.id == profileId } ?: return
+        val allProfiles = getAllAvailableProfiles()
+        val selectedProfile = allProfiles.find { it.id == profileId } ?: return
         val channelSize = selectedProfile.channelCount
+        
         val currentInstances = _currentShow.value.fixtureInstances.toMutableList()
+        val currentShowProfiles = _currentShow.value.customProfiles.toMutableList()
+        
+        // Se è un profilo utente, assicuriamoci che sia salvato anche nello showfile per portabilità
+        if (!DefaultFixtureLibrary.profiles.any { it.id == profileId } && 
+            !currentShowProfiles.any { it.id == profileId }) {
+            currentShowProfiles.add(selectedProfile)
+        }
+
         var currentDmxAddress = startAddress
         if (currentDmxAddress == 1 && currentInstances.isNotEmpty()) {
             val maxOccupied = currentInstances.maxOf { inst ->
-                val footprint = getAllAvailableProfiles().find { it.id == inst.profileId }?.channelCount ?: 1
+                val footprint = allProfiles.find { it.id == inst.profileId }?.channelCount ?: 1
                 inst.startAddress + footprint - 1
             }
             currentDmxAddress = (maxOccupied + 1).coerceIn(1, 512)
         }
+
         for (i in 1..quantity) {
             if (currentDmxAddress + channelSize - 1 > 512) break
-            currentInstances.add(FixtureInstance(UUID.randomUUID().toString(), if (quantity == 1) baseName else "$baseName ${String.format("%02d", i)}", profileId, currentDmxAddress))
+            currentInstances.add(FixtureInstance(
+                UUID.randomUUID().toString(), 
+                if (quantity == 1) baseName else "$baseName ${String.format("%02d", i)}", 
+                profileId, 
+                currentDmxAddress
+            ))
             currentDmxAddress += channelSize
         }
-        val updatedShow = _currentShow.value.copy(fixtureInstances = currentInstances)
+
+        val updatedShow = _currentShow.value.copy(
+            fixtureInstances = currentInstances,
+            customProfiles = currentShowProfiles
+        )
         _currentShow.value = updatedShow
         repository.saveShowfile(updatedShow)
         updateDimmerMap()
@@ -272,6 +292,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val updatedShow = _currentShow.value.copy(fixtureGroups = _currentShow.value.fixtureGroups.filter { it.id != id })
         _currentShow.value = updatedShow
         repository.saveShowfile(updatedShow)
+    }
+
+    fun deleteFixtureInstance(id: String) {
+        val updatedInstances = _currentShow.value.fixtureInstances.filter { it.id != id }
+        // Rimuoviamo l'id anche dai gruppi
+        val updatedGroups = _currentShow.value.fixtureGroups.map { group ->
+            group.copy(fixtureIds = group.fixtureIds.filter { it != id })
+        }
+        val updatedShow = _currentShow.value.copy(
+            fixtureInstances = updatedInstances,
+            fixtureGroups = updatedGroups
+        )
+        _currentShow.value = updatedShow
+        repository.saveShowfile(updatedShow)
+        updateDimmerMap()
     }
 
     fun deleteScene(index: Int) {
@@ -472,6 +507,46 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _userFixtureProfiles.value = updatedList
         libraryRepository.saveUserProfiles(updatedList)
         updateDimmerMap()
+    }
+
+    fun applyColorToSelected(fixtureIds: List<String>, r: Int, g: Int, b: Int) {
+        val show = _currentShow.value
+        val allProfiles = getAllAvailableProfiles()
+        
+        // Calcolo Bianco (W) per fari RGBW
+        val w = minOf(r, minOf(g, b))
+        
+        fixtureIds.forEach { fid ->
+            val inst = show.fixtureInstances.find { it.id == fid } ?: return@forEach
+            val profile = allProfiles.find { it.id == inst.profileId } ?: return@forEach
+            
+            profile.channels.forEach { ch ->
+                val addr = inst.startAddress - 1 + ch.offset
+                when (ch.type) {
+                    ChannelType.COLOR_R -> updateDmxChannel(addr, r.toByte())
+                    ChannelType.COLOR_G -> updateDmxChannel(addr, g.toByte())
+                    ChannelType.COLOR_B -> updateDmxChannel(addr, b.toByte())
+                    ChannelType.COLOR_W -> updateDmxChannel(addr, w.toByte())
+                    else -> {}
+                }
+            }
+        }
+    }
+
+    fun saveColorPalette(name: String, hex: String, r: Int, g: Int, b: Int) {
+        val w = minOf(r, minOf(g, b))
+        val newPalette = ColorPalette(UUID.randomUUID().toString(), name, hex, r, g, b, w)
+        val updatedPalettes = _currentShow.value.colorPalettes + newPalette
+        val updatedShow = _currentShow.value.copy(colorPalettes = updatedPalettes)
+        _currentShow.value = updatedShow
+        repository.saveShowfile(updatedShow)
+    }
+
+    fun deleteColorPalette(id: String) {
+        val updatedPalettes = _currentShow.value.colorPalettes.filter { it.id != id }
+        val updatedShow = _currentShow.value.copy(colorPalettes = updatedPalettes)
+        _currentShow.value = updatedShow
+        repository.saveShowfile(updatedShow)
     }
 
     fun exportShow(uri: android.net.Uri) {

@@ -1,49 +1,55 @@
 package com.paliddo.pdmxcontroller.ui.screens
 
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.paliddo.pdmxcontroller.data.model.ChannelDefinition
+import com.paliddo.pdmxcontroller.data.model.*
 import com.paliddo.pdmxcontroller.ui.screens.components.CreateOrCopySceneDialog
 import com.paliddo.pdmxcontroller.ui.screens.components.CreateOrCopyShowDialog
 import com.paliddo.pdmxcontroller.ui.screens.components.ProfileSelectorDialog
 import com.paliddo.pdmxcontroller.ui.viewmodel.MainViewModel
 import kotlinx.coroutines.delay
-import kotlin.math.floor
+import java.util.UUID
+import kotlin.math.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,10 +82,10 @@ fun FaderScreen(viewModel: MainViewModel) {
     }
 
     // Monitoraggio messaggi di backup
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     LaunchedEffect(backupStatus) {
         backupStatus?.let {
-            android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show()
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
             viewModel.clearBackupStatus()
         }
     }
@@ -87,12 +93,13 @@ fun FaderScreen(viewModel: MainViewModel) {
     // --- STATI LOCALI ---
     val selectedFixtureIds = remember { mutableStateListOf<String>() }
     var previousMasterValue by remember { mutableStateOf(100f) }
+    var currentColorSelection by remember { mutableStateOf(Color.Red) }
 
     // Stati Navigazione Settings
     var isSettingsOpen by remember { mutableStateOf(false) }
     var currentSettingsTab by remember { mutableStateOf("CONTROLLER") }
     var isFixtureEditorOpen by remember { mutableStateOf(false) }
-    var editingProfile by remember { mutableStateOf<com.paliddo.pdmxcontroller.data.model.FixtureProfile?>(null) }
+    var editingProfile by remember { mutableStateOf<FixtureProfile?>(null) }
 
     // Stati Dialog
     var showMenuExpanded by remember { mutableStateOf(false) }
@@ -106,6 +113,7 @@ fun FaderScreen(viewModel: MainViewModel) {
     var createSceneDialogOpened by remember { mutableStateOf(false) }
     var showToDelete by remember { mutableStateOf<String?>(null) }
     var sceneToDeleteIndex by remember { mutableStateOf<Int?>(null) }
+    var fixtureToDeleteId by remember { mutableStateOf<String?>(null) }
     var showConnectionErrorDialog by remember { mutableStateOf(false) }
 
     // Input Dialog Patch
@@ -124,7 +132,34 @@ fun FaderScreen(viewModel: MainViewModel) {
     val currentScene = remember(currentShow, activeSceneIndex) {
         currentShow.scenes.getOrNull(activeSceneIndex) ?: currentShow.scenes.first()
     }
-    val allProfiles = remember(currentShow) { viewModel.getAllAvailableProfiles() }
+    
+    val userProfiles by viewModel.userFixtureProfiles.collectAsState()
+    val allProfiles = remember(currentShow, userProfiles) { viewModel.getAllAvailableProfiles() }
+
+    // Monitoraggio selezione fixture per aggiornare il colore attuale
+    LaunchedEffect(selectedFixtureIds.toList()) {
+        if (selectedFixtureIds.isNotEmpty()) {
+            val firstFid = selectedFixtureIds.first()
+            val inst = currentShow.fixtureInstances.find { it.id == firstFid }
+            val profile = allProfiles.find { it.id == inst?.profileId }
+            if (inst != null && profile != null) {
+                var r = 0; var g = 0; var b = 0
+                profile.channels.forEach { ch: ChannelDefinition ->
+                    val addr = inst.startAddress - 1 + ch.offset
+                    if (addr in dmxData.indices) {
+                        val v = dmxData[addr].toInt() and 0xFF
+                        when (ch.type) {
+                            ChannelType.COLOR_R -> r = v
+                            ChannelType.COLOR_G -> g = v
+                            ChannelType.COLOR_B -> b = v
+                            else -> {}
+                        }
+                    }
+                }
+                currentColorSelection = Color(r, g, b)
+            }
+        }
+    }
 
     // Auto-popolamento Patch
     LaunchedEffect(selectedProfileIdForPatch, patchDialogOpened) {
@@ -248,7 +283,7 @@ fun FaderScreen(viewModel: MainViewModel) {
                                     onClick = { viewModel.loadShow(showName); showMenuExpanded = false }
                                 )
                             }
-                            Divider(color = colorSurfaceAccent)
+                            HorizontalDivider(color = colorSurfaceAccent)
                             DropdownMenuItem(text = { Text("+ Nuovo Show", color = colorCyan) }, onClick = { createShowDialogOpened = true; showMenuExpanded = false })
                         }
                     }
@@ -305,7 +340,7 @@ fun FaderScreen(viewModel: MainViewModel) {
                                         }
                                         Switch(checked = netSettings.autoConnect, onCheckedChange = { viewModel.updateNetworkSettings(netSettings.copy(autoConnect = it)) }, colors = SwitchDefaults.colors(checkedThumbColor = colorCyan, checkedTrackColor = colorCyan.copy(0.3f)))
                                     }
-                                    Divider(color = colorSurfaceAccent, thickness = 1.dp)
+                                    HorizontalDivider(color = colorSurfaceAccent, thickness = 1.dp)
                                     Text("Indirizzo IP Controller:", color = colorTextPrimary.copy(0.6f), fontSize = 12.sp)
                                     OutlinedTextField(value = netSettings.ipAddress, onValueChange = { viewModel.updateNetworkSettings(netSettings.copy(ipAddress = it)) }, textStyle = TextStyle(color = colorTextPrimary), modifier = Modifier.fillMaxWidth(), singleLine = true, colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = colorSurfaceAccent, focusedBorderColor = colorCyan))
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -333,13 +368,13 @@ fun FaderScreen(viewModel: MainViewModel) {
                                     Card(colors = CardDefaults.cardColors(containerColor = if (isConnected) colorGreenLive.copy(0.1f) else colorDisconnected.copy(0.1f)), modifier = Modifier.fillMaxWidth(), border = BorderStroke(1.dp, if (isConnected) colorGreenLive else colorDisconnected)) {
                                         Column(modifier = Modifier.padding(16.dp)) {
                                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
-                                                Box(modifier = Modifier.size(10.dp).background(if (isConnected) colorGreenLive else colorDisconnected, RoundedCornerShape(50)))
+                                                Box(modifier = Modifier.size(10.dp).background(if (isConnected) colorGreenLive else colorDisconnected, CircleShape))
                                                 Spacer(modifier = Modifier.width(8.dp))
                                                 Text(text = if (isConnected) "CONTROLLER ONLINE" else "CONTROLLER OFFLINE", color = if (isConnected) colorGreenLive else colorDisconnected, fontWeight = FontWeight.Bold)
                                             }
                                             if (isConnected && details != null) {
                                                 Spacer(modifier = Modifier.height(12.dp))
-                                                Divider(color = colorGreenLive.copy(alpha = 0.2f))
+                                                HorizontalDivider(color = colorGreenLive.copy(alpha = 0.2f))
                                                 Spacer(modifier = Modifier.height(12.dp))
                                                 DetailRow("Nome:", details?.shortName ?: "-")
                                                 DetailRow("Modello:", details?.longName ?: "-")
@@ -372,14 +407,10 @@ fun FaderScreen(viewModel: MainViewModel) {
                                                     }
                                                     
                                                     IconButton(onClick = { 
-                                                        editingProfile = profile.copy(id = java.util.UUID.randomUUID().toString())
+                                                        editingProfile = profile.copy(id = UUID.randomUUID().toString())
                                                         isFixtureEditorOpen = true
                                                     }) {
-                                                        Icon(
-                                                            imageVector = Icons.Default.ContentCopy,
-                                                            contentDescription = "Copia",
-                                                            tint = colorCyan
-                                                        )
+                                                        Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "Copia", tint = colorCyan)
                                                     }
 
                                                     if (!isFactory) {
@@ -476,7 +507,6 @@ fun FaderScreen(viewModel: MainViewModel) {
                                         gridItemsIndexed(currentScene.cueList) { idx, cue ->
                                             val isSelected = idx == currentCueIndex
                                             Card(colors = CardDefaults.cardColors(containerColor = if (isSelected) colorGreenLive.copy(0.25f) else colorSurfaceAccent), modifier = Modifier.fillMaxWidth().height(75.dp).border(2.dp, if (isSelected) colorGreenLive else Color.Transparent, RoundedCornerShape(8.dp)).clickable { if (isSingleModeEnabled) viewModel.selectCueManually(idx) else viewModel.triggerFadeToCue(idx) }, shape = RoundedCornerShape(8.dp)) {
-                                                @Suppress("DEPRECATION")
                                                 Column(modifier = Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.SpaceBetween) {
                                                     Text(text = "CUE ${cue.number}", color = if (isSelected) colorGreenLive else colorCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                                     Text(text = cue.name, color = colorTextPrimary, fontSize = 12.sp, maxLines = 1)
@@ -505,55 +535,24 @@ fun FaderScreen(viewModel: MainViewModel) {
                                     LazyVerticalGrid(columns = GridCells.Adaptive(minSize = 130.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                         items(currentShow.fixtureInstances) { fixture ->
                                             val isSelected = selectedFixtureIds.contains(fixture.id)
-                                            Box(modifier = Modifier.background(if (isSelected) colorPurple.copy(0.4f) else colorSurfaceAccent, shape = RoundedCornerShape(4.dp)).border(1.dp, if (isSelected) colorCyan else Color.Transparent, shape = RoundedCornerShape(4.dp)).clickable { if (isSelected) selectedFixtureIds.remove(fixture.id) else selectedFixtureIds.add(fixture.id); activeGroupId = null }.padding(6.dp)) {
-                                                Column {
-                                                    Text(text = fixture.userGivenName, color = colorTextPrimary, fontWeight = FontWeight.Bold, fontSize = 11.sp, maxLines = 1)
-                                                    Text(text = "DMX: ${fixture.startAddress}", color = colorCyan, fontSize = 9.sp)
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Box(modifier = Modifier.fillMaxWidth().weight(1f).background(colorSurface, shape = RoundedCornerShape(8.dp)).padding(8.dp)) {
-                                    if (selectedFixtureIds.isEmpty()) {
-                                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Seleziona fixture per i controlli", color = colorTextPrimary.copy(0.4f)) }
-                                    } else {
-                                        val commonChannels = remember(selectedFixtureIds.toList(), currentShow.fixtureInstances) {
-                                            val selectedInstances = currentShow.fixtureInstances.filter { it.id in selectedFixtureIds }
-                                            if (selectedInstances.isEmpty()) return@remember emptyList<ChannelDefinition>()
-                                            val firstProfile = allProfiles.find { it.id == selectedInstances.first().profileId }
-                                            val firstChannels = firstProfile?.channels ?: emptyList()
-                                            firstChannels.filter { ch1 -> selectedInstances.all { inst -> val p = allProfiles.find { it.id == inst.profileId }; p?.channels?.any { ch2 -> ch2.name == ch1.name && ch2.type == ch1.type } == true } }
-                                        }
-
-                                        if (commonChannels.isEmpty()) {
-                                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Nessun parametro comune selezionato", color = colorTextPrimary.copy(0.4f)) }
-                                        } else {
-                                            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                                items(commonChannels, key = { it.name + it.offset }) { ch ->
-                                                    val firstInst = currentShow.fixtureInstances.find { it.id == selectedFixtureIds.first() }!!
-                                                    val realDmxFirst = firstInst.startAddress - 1 + ch.offset
-                                                    val valRaw = if (realDmxFirst in dmxData.indices) dmxData[realDmxFirst].toInt() and 0xFF else 0
-                                                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxHeight().width(110.dp).background(colorSurfaceAccent, shape = RoundedCornerShape(6.dp)).padding(6.dp)) {
-                                                        Text(text = ch.name.uppercase(), color = colorCyan, fontSize = 10.sp, maxLines = 1)
-                                                        if (ch.hasPresets && ch.presets.isNotEmpty()) {
-                                                            Text(text = ch.presets.find { valRaw in it.from..it.to }?.label ?: "$valRaw", color = colorTextPrimary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                                                            Spacer(modifier = Modifier.height(4.dp))
-                                                            Column(modifier = Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                                ch.presets.forEach { preset ->
-                                                                    val isCurrent = valRaw in preset.from..preset.to
-                                                                    Box(modifier = Modifier.fillMaxWidth().weight(1f).background(if (isCurrent) colorPurple else colorBackground, RoundedCornerShape(4.dp)).border(1.dp, if (isCurrent) colorCyan else Color.Transparent, RoundedCornerShape(4.dp)).clickable { selectedFixtureIds.forEach { fid -> currentShow.fixtureInstances.find { it.id == fid }?.let { inst -> val p = allProfiles.find { it.id == inst.profileId }; val actualCh = p?.channels?.find { it.name == ch.name && it.type == ch.type }; actualCh?.let { viewModel.updateDmxChannel(inst.startAddress - 1 + it.offset, preset.from.toByte()) } } } }.padding(horizontal = 4.dp), contentAlignment = Alignment.Center) {
-                                                                        Text(preset.label, color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, lineHeight = 10.sp)
-                                                                    }
-                                                                }
-                                                            }
-                                                        } else {
-                                                            Text(text = "$valRaw", color = colorTextPrimary, fontWeight = FontWeight.Bold)
-                                                            Spacer(modifier = Modifier.height(10.dp))
-                                                            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                                                Slider(value = valRaw.toFloat(), onValueChange = { nv -> selectedFixtureIds.forEach { fid -> currentShow.fixtureInstances.find { it.id == fid }?.let { inst -> val p = allProfiles.find { it.id == inst.profileId }; val actualCh = p?.channels?.find { it.name == ch.name && it.type == ch.type }; actualCh?.let { viewModel.updateDmxChannel(inst.startAddress - 1 + it.offset, nv.toInt().toByte()) } } } }, valueRange = 0f..255f, colors = SliderDefaults.colors(activeTrackColor = colorPurple, inactiveTrackColor = colorBackground), thumb = { Box(modifier = Modifier.width(24.dp).height(36.dp).background(colorCyan, shape = RoundedCornerShape(4.dp))) }, modifier = Modifier.graphicsLayer { rotationZ = -90f }.layout { measurable, constraints -> val customConstraints = constraints.copy(minWidth = constraints.maxHeight, maxWidth = constraints.maxHeight); val placeable = measurable.measure(customConstraints); layout(placeable.height, placeable.width) { placeable.place(-placeable.width / 2 + placeable.height / 2, -placeable.height / 2 + placeable.width / 2) } }.fillMaxHeight())
-                                                            }
+                                            Box(
+                                                modifier = Modifier
+                                                    .background(if (isSelected) colorPurple.copy(0.4f) else colorSurfaceAccent, shape = RoundedCornerShape(4.dp))
+                                                    .border(1.dp, if (isSelected) colorCyan else Color.Transparent, shape = RoundedCornerShape(4.dp))
+                                                    .clickable { if (isSelected) selectedFixtureIds.remove(fixture.id) else selectedFixtureIds.add(fixture.id); activeGroupId = null }
+                                                    .padding(6.dp)
+                                            ) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Column(modifier = Modifier.weight(1f)) {
+                                                        Text(text = fixture.userGivenName, color = colorTextPrimary, fontWeight = FontWeight.Bold, fontSize = 11.sp, maxLines = 1)
+                                                        Text(text = "DMX: ${fixture.startAddress}", color = colorCyan, fontSize = 9.sp)
+                                                    }
+                                                    if (!isLiveMode) {
+                                                        IconButton(
+                                                            onClick = { fixtureToDeleteId = fixture.id },
+                                                            modifier = Modifier.size(24.dp)
+                                                        ) {
+                                                            Icon(Icons.Default.Delete, contentDescription = "Elimina", tint = colorDisconnected, modifier = Modifier.size(16.dp))
                                                         }
                                                     }
                                                 }
@@ -561,57 +560,111 @@ fun FaderScreen(viewModel: MainViewModel) {
                                         }
                                     }
                                 }
-                            }
-                        }
-                    }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                
+                                // AREA CONTROLLI AVANZATI (COLOR PICKER & PAN/TILT)
+                                Box(modifier = Modifier.fillMaxWidth().weight(1f).background(colorSurface, shape = RoundedCornerShape(8.dp)).padding(8.dp)) {
+                                    if (selectedFixtureIds.isEmpty()) {
+                                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Seleziona fixture per i controlli", color = colorTextPrimary.copy(0.4f)) }
+                                    } else {
+                                        val selectedInstances = currentShow.fixtureInstances.filter { it.id in selectedFixtureIds }
+                                        val hasColor = selectedInstances.any { inst -> allProfiles.find { it.id == inst.profileId }?.channels?.any { it.type in listOf(ChannelType.COLOR_R, ChannelType.COLOR_G, ChannelType.COLOR_B) } == true }
+                                        val hasPanTilt = selectedInstances.any { inst -> allProfiles.find { it.id == inst.profileId }?.channels?.any { it.type in listOf(ChannelType.PAN, ChannelType.TILT) } == true }
 
-                    Spacer(modifier = Modifier.width(12.dp))
+                                        Column {
+                                            if (hasColor || hasPanTilt) {
+                                                var controlTab by remember { mutableStateOf(if (hasColor) "COLOR" else "POSITION") }
+                                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                    if (hasColor) {
+                                                        Button(
+                                                            onClick = { controlTab = "COLOR" },
+                                                            colors = ButtonDefaults.buttonColors(containerColor = if (controlTab == "COLOR") colorPurple else colorSurfaceAccent),
+                                                            modifier = Modifier.weight(1f)
+                                                        ) { Text("COLORI") }
+                                                    }
+                                                    if (hasPanTilt) {
+                                                        Button(
+                                                            onClick = { controlTab = "POSITION" },
+                                                            colors = ButtonDefaults.buttonColors(containerColor = if (controlTab == "POSITION") colorPurple else colorSurfaceAccent),
+                                                            modifier = Modifier.weight(1f)
+                                                        ) { Text("POSIZIONE") }
+                                                    }
+                                                    Button(
+                                                        onClick = { controlTab = "FADERS" },
+                                                        colors = ButtonDefaults.buttonColors(containerColor = if (controlTab == "FADERS") colorPurple else colorSurfaceAccent),
+                                                        modifier = Modifier.weight(1f)
+                                                    ) { Text("FADERS") }
+                                                }
+                                                Spacer(modifier = Modifier.height(8.dp))
 
-                    // COLONNA 3: CUE LIST
-                    Column(modifier = Modifier.weight(0.35f).fillMaxHeight().background(Color(0xFF11141A), shape = RoundedCornerShape(8.dp)).padding(10.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Box {
-                                Text(text = "SCENA: ${currentScene.name} ▾", color = colorPurple, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { sceneMenuExpanded = true })
-                                DropdownMenu(expanded = sceneMenuExpanded, onDismissRequest = { sceneMenuExpanded = false }, modifier = Modifier.background(colorSurface)) {
-                                    currentShow.scenes.forEachIndexed { idx, scene ->
-                                        DropdownMenuItem(
-                                            text = { Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(scene.name, color = colorTextPrimary, modifier = Modifier.weight(1f)); if (currentShow.scenes.size > 1) { Text("🗑", color = colorDisconnected, modifier = Modifier.clickable { sceneToDeleteIndex = idx; sceneMenuExpanded = false }.padding(8.dp)) } } },
-                                            onClick = { viewModel.selectScene(idx); sceneMenuExpanded = false }
-                                        )
+                                                when (controlTab) {
+                                                    "COLOR" -> ColorControlSection(
+                                                        viewModel = viewModel, 
+                                                        selectedIds = selectedFixtureIds.toList(), 
+                                                        palettes = currentShow.colorPalettes,
+                                                        currentColor = currentColorSelection,
+                                                        onColorChange = { currentColorSelection = it }
+                                                    )
+                                                    "POSITION" -> PositionControlSection(viewModel, selectedFixtureIds.toList(), currentShow, allProfiles)
+                                                    "FADERS" -> FaderControlSection(viewModel, selectedFixtureIds.toList(), currentShow, allProfiles, dmxData)
+                                                }
+                                            } else {
+                                                FaderControlSection(viewModel, selectedFixtureIds.toList(), currentShow, allProfiles, dmxData)
+                                            }
+                                        }
                                     }
-                                    Divider(color = colorSurfaceAccent)
-                                    DropdownMenuItem(text = { Text("+ Nuova Scena", color = colorCyan) }, onClick = { createSceneDialogOpened = true; sceneMenuExpanded = false })
                                 }
                             }
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(modifier = Modifier.size(8.dp).background(if (isConnected) colorGreenLive else colorDisconnected, RoundedCornerShape(50)))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(text = if (isConnected) "ARTNET" else "OFFLINE", color = if (isConnected) colorGreenLive else colorDisconnected, fontSize = 9.sp)
-                            }
                         }
 
-                        Box(modifier = Modifier.weight(1f).fillMaxWidth().border(1.dp, colorSurfaceAccent, RoundedCornerShape(4.dp)).padding(4.dp)) {
-                            LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                itemsIndexed(currentScene.cueList) { index, cue ->
-                                    val isSelected = index == currentCueIndex
-                                    val isActive = index == runningCueIndex
-                                    val bgColor = when { isActive && isSelected -> colorGreenLive.copy(0.4f); isActive -> colorGreenLive.copy(0.2f); isSelected -> colorPurple.copy(0.4f); else -> Color.Transparent }
-                                    val textColor = when { isActive -> colorGreenLive; isSelected -> colorCyan; else -> colorTextPrimary }
-                                    Row(modifier = Modifier.fillMaxWidth().background(bgColor, shape = RoundedCornerShape(4.dp)).border(width = 1.dp, color = if (isSelected) colorCyan.copy(0.5f) else Color.Transparent, shape = RoundedCornerShape(4.dp)).clickable { if (isSingleModeEnabled || isLiveMode) viewModel.selectCueManually(index) else viewModel.triggerFadeToCue(index) }.padding(8.dp)) {
-                                        Text(text = "${cue.number}: ${cue.name}", color = textColor, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                                        if (!isLiveMode) Text("✕", color = colorDisconnected, modifier = Modifier.clickable { viewModel.deleteCue(index) })
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        // COLONNA 3: CUE LIST
+                        Column(modifier = Modifier.weight(0.35f).fillMaxHeight().background(Color(0xFF11141A), shape = RoundedCornerShape(8.dp)).padding(10.dp)) {
+                            Row(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Box {
+                                    Text(text = "SCENA: ${currentScene.name} ▾", color = colorPurple, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { sceneMenuExpanded = true })
+                                    DropdownMenu(expanded = sceneMenuExpanded, onDismissRequest = { sceneMenuExpanded = false }, modifier = Modifier.background(colorSurface)) {
+                                        currentShow.scenes.forEachIndexed { idx, scene ->
+                                            DropdownMenuItem(
+                                                text = { Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(scene.name, color = colorTextPrimary, modifier = Modifier.weight(1f)); if (currentShow.scenes.size > 1) { Text("🗑", color = colorDisconnected, modifier = Modifier.clickable { sceneToDeleteIndex = idx; sceneMenuExpanded = false }.padding(8.dp)) } } },
+                                                onClick = { viewModel.selectScene(idx); sceneMenuExpanded = false }
+                                            )
+                                        }
+                                        HorizontalDivider(color = colorSurfaceAccent)
+                                        DropdownMenuItem(text = { Text("+ Nuova Scena", color = colorCyan) }, onClick = { createSceneDialogOpened = true; sceneMenuExpanded = false })
+                                    }
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(modifier = Modifier.size(8.dp).background(if (isConnected) colorGreenLive else colorDisconnected, CircleShape))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(text = if (isConnected) "ARTNET" else "OFFLINE", color = if (isConnected) colorGreenLive else colorDisconnected, fontSize = 9.sp)
+                                }
+                            }
+
+                            Box(modifier = Modifier.weight(1f).fillMaxWidth().border(1.dp, colorSurfaceAccent, RoundedCornerShape(4.dp)).padding(4.dp)) {
+                                LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    itemsIndexed(currentScene.cueList) { index, cue ->
+                                        val isSelected = index == currentCueIndex
+                                        val isActive = index == runningCueIndex
+                                        val bgColor = when { isActive && isSelected -> colorGreenLive.copy(0.4f); isActive -> colorGreenLive.copy(0.2f); isSelected -> colorPurple.copy(0.4f); else -> Color.Transparent }
+                                        val textColor = when { isActive -> colorGreenLive; isSelected -> colorCyan; else -> colorTextPrimary }
+                                        Row(modifier = Modifier.fillMaxWidth().background(bgColor, shape = RoundedCornerShape(4.dp)).border(width = 1.dp, color = if (isSelected) colorCyan.copy(0.5f) else Color.Transparent, shape = RoundedCornerShape(4.dp)).clickable { if (isSingleModeEnabled || isLiveMode) viewModel.selectCueManually(index) else viewModel.triggerFadeToCue(index) }.padding(8.dp)) {
+                                            Text(text = "${cue.number}: ${cue.name}", color = textColor, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                                            if (!isLiveMode) Text("✕", color = colorDisconnected, modifier = Modifier.clickable { viewModel.deleteCue(index) })
+                                        }
                                     }
                                 }
                             }
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Button(onClick = { viewModel.toggleSingleMode() }, modifier = Modifier.weight(0.5f).height(38.dp), colors = ButtonDefaults.buttonColors(containerColor = if (isSingleModeEnabled) colorPurple else colorSurfaceAccent), shape = RoundedCornerShape(4.dp)) { Text(if (isSingleModeEnabled) "🎯 SINGLE" else "⏭️ NEXT", fontSize = 9.sp) }
-                                Button(onClick = { viewModel.toggleLoop() }, modifier = Modifier.weight(0.5f).height(38.dp), colors = ButtonDefaults.buttonColors(containerColor = if (isLoopEnabled) colorCyan else colorSurfaceAccent), shape = RoundedCornerShape(4.dp)) { Text("AUTOLOOP", fontSize = 9.sp) }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Button(onClick = { viewModel.toggleSingleMode() }, modifier = Modifier.weight(0.5f).height(38.dp), colors = ButtonDefaults.buttonColors(containerColor = if (isSingleModeEnabled) colorPurple else colorSurfaceAccent), shape = RoundedCornerShape(4.dp)) { Text(if (isSingleModeEnabled) "🎯 SINGLE" else "⏭️ NEXT", fontSize = 9.sp) }
+                                    Button(onClick = { viewModel.toggleLoop() }, modifier = Modifier.weight(0.5f).height(38.dp), colors = ButtonDefaults.buttonColors(containerColor = if (isLoopEnabled) colorCyan else colorSurfaceAccent), shape = RoundedCornerShape(4.dp)) { Text("AUTOLOOP", fontSize = 9.sp) }
+                                }
+                                val isRunning by viewModel.isSequenceRunning.collectAsState()
+                                Button(onClick = { viewModel.handleGoStopAction() }, modifier = Modifier.fillMaxWidth().height(55.dp), colors = ButtonDefaults.buttonColors(containerColor = if (isRunning) colorDisconnected else if (isSingleModeEnabled) colorCyan else colorPurple), shape = RoundedCornerShape(6.dp)) { Text(if (isRunning) "STOP" else if (isSingleModeEnabled) "GO (SEL)" else "GO", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold) }
                             }
-                            val isRunning by viewModel.isSequenceRunning.collectAsState()
-                            Button(onClick = { viewModel.handleGoStopAction() }, modifier = Modifier.fillMaxWidth().height(55.dp), colors = ButtonDefaults.buttonColors(containerColor = if (isRunning) colorDisconnected else if (isSingleModeEnabled) colorCyan else colorPurple), shape = RoundedCornerShape(6.dp)) { Text(if (isRunning) "STOP" else if (isSingleModeEnabled) "GO (SEL)" else "GO", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold) }
                         }
                     }
                 }
@@ -681,8 +734,321 @@ fun FaderScreen(viewModel: MainViewModel) {
         AlertDialog(onDismissRequest = { sceneToDeleteIndex = null }, containerColor = colorSurface, title = { Text("ELIMINA SCENA", color = colorDisconnected) }, text = { Text("Sei sicuro di voler eliminare la scena '$sceneName'? Tutte le cue contenute andranno perse.", color = colorTextPrimary) }, confirmButton = { Button(onClick = { sceneToDeleteIndex?.let { viewModel.deleteScene(it) }; sceneToDeleteIndex = null }, colors = ButtonDefaults.buttonColors(containerColor = colorDisconnected)) { Text("ELIMINA", color = Color.White) } }, dismissButton = { TextButton(onClick = { sceneToDeleteIndex = null }) { Text("ANNULLA", color = colorTextPrimary) } })
     }
 
+    if (fixtureToDeleteId != null) {
+        val fixtureName = currentShow.fixtureInstances.find { it.id == fixtureToDeleteId }?.userGivenName ?: ""
+        AlertDialog(
+            onDismissRequest = { fixtureToDeleteId = null },
+            containerColor = colorSurface,
+            title = { Text("ELIMINA FIXTURE", color = colorDisconnected) },
+            text = { Text("Sei sicuro di voler eliminare '$fixtureName' dallo show?", color = colorTextPrimary) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        fixtureToDeleteId?.let { 
+                            viewModel.deleteFixtureInstance(it)
+                            selectedFixtureIds.remove(it)
+                        }
+                        fixtureToDeleteId = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = colorDisconnected)
+                ) {
+                    Text("ELIMINA", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { fixtureToDeleteId = null }) {
+                    Text("ANNULLA", color = colorTextPrimary)
+                }
+            }
+        )
+    }
+
     if (showConnectionErrorDialog) {
         AlertDialog(onDismissRequest = { showConnectionErrorDialog = false }, containerColor = colorSurface, title = { Text("CONTROLLER NON RAGGIUNGIBILE", color = colorDisconnected) }, text = { Text("L'app non riceve risposta dal controller Art-Net.\n\nAssicurati che:\n1. Il tablet sia connesso al Wi-Fi 'P-DMX GG'\n2. L'indirizzo IP sia correttamente impostato su 192.168.4.1\n3. L'ESP32 sia alimentato correttamente.", color = colorTextPrimary) }, confirmButton = { Button(onClick = { showConnectionErrorDialog = false }, colors = ButtonDefaults.buttonColors(containerColor = colorCyan)) { Text("HO CAPITO", color = colorBackground) } })
+    }
+}
+
+@Composable
+fun ColorControlSection(
+    viewModel: MainViewModel, 
+    selectedIds: List<String>, 
+    palettes: List<ColorPalette>,
+    currentColor: Color,
+    onColorChange: (Color) -> Unit
+) {
+    var paletteNameInput by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    
+    val colorBackground = Color(0xFF0B0E14)
+    val colorSurfaceAccent = Color(0xFF232834)
+    val colorPurple = Color(0xFF9D4EDD)
+    val colorCyan = Color(0xFF00B4D8)
+    val colorTextPrimary = Color(0xFFF8FAFC)
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
+            // COLOR PICKER (CANVAS)
+            Box(modifier = Modifier.weight(0.5f).aspectRatio(1f).padding(8.dp)) {
+                ColorWheel(initialColor = currentColor) { color ->
+                    onColorChange(color)
+                    viewModel.applyColorToSelected(selectedIds, (color.red * 255).toInt(), (color.green * 255).toInt(), (color.blue * 255).toInt())
+                }
+            }
+
+            // INFO E SALVATAGGIO
+            Column(modifier = Modifier.weight(0.5f).padding(8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("COLORE ATTUALE", color = colorCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(modifier = Modifier.size(40.dp).background(currentColor, CircleShape).border(2.dp, Color.White, CircleShape))
+                    
+                    var hexInput by remember(currentColor) { 
+                        mutableStateOf(String.format("%06X", (0xFFFFFF and currentColor.toArgb())))
+                    }
+                    
+                    OutlinedTextField(
+                        value = hexInput,
+                        onValueChange = { 
+                            hexInput = it.uppercase()
+                            if (it.length == 6) {
+                                try {
+                                    val parsedColor = Color(android.graphics.Color.parseColor("#$it"))
+                                    onColorChange(parsedColor)
+                                    viewModel.applyColorToSelected(selectedIds, (parsedColor.red * 255).toInt(), (parsedColor.green * 255).toInt(), (parsedColor.blue * 255).toInt())
+                                } catch (e: Exception) {}
+                            }
+                        },
+                        prefix = { Text("#") },
+                        modifier = Modifier.width(110.dp),
+                        textStyle = TextStyle(color = colorTextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp),
+                        singleLine = true
+                    )
+                }
+
+                OutlinedTextField(
+                    value = paletteNameInput,
+                    onValueChange = { paletteNameInput = it },
+                    label = { Text("Nome Palette", fontSize = 10.sp) },
+                    textStyle = TextStyle(color = colorTextPrimary, fontSize = 12.sp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Button(
+                    onClick = {
+                        if (paletteNameInput.isNotEmpty()) {
+                            val hex = String.format("#%06X", (0xFFFFFF and currentColor.toArgb()))
+                            viewModel.saveColorPalette(paletteNameInput, hex, (currentColor.red * 255).toInt(), (currentColor.green * 255).toInt(), (currentColor.blue * 255).toInt())
+                            paletteNameInput = ""
+                            Toast.makeText(context, "Palette Salvata", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = colorPurple),
+                    enabled = paletteNameInput.isNotEmpty()
+                ) {
+                    Text("SALVA PALETTE", fontSize = 10.sp)
+                }
+            }
+        }
+
+        // ELENCO PALETTE
+        Text("PALETTE SALVATE", color = colorPurple, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+        LazyRow(modifier = Modifier.fillMaxWidth().height(60.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 4.dp)) {
+            items(palettes) { palette ->
+                val pColor = Color(android.graphics.Color.parseColor(palette.hexCode))
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .width(70.dp)
+                        .background(colorSurfaceAccent, RoundedCornerShape(4.dp))
+                        .clickable { 
+                            onColorChange(pColor)
+                            viewModel.applyColorToSelected(selectedIds, palette.r, palette.g, palette.b) 
+                        }
+                        .padding(4.dp)
+                ) {
+                    Box(modifier = Modifier.size(24.dp).background(pColor, CircleShape).border(1.dp, Color.White.copy(0.3f), CircleShape))
+                    Text(palette.name, color = colorTextPrimary, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ColorWheel(initialColor: Color, onColorSelected: (Color) -> Unit) {
+    var canvasSize by remember { mutableStateOf(Offset.Zero) }
+    
+    val hsv = remember(initialColor) {
+        val floatArray = FloatArray(3)
+        android.graphics.Color.colorToHSV(initialColor.toArgb(), floatArray)
+        floatArray
+    }
+
+    Canvas(modifier = Modifier
+        .fillMaxSize()
+        .pointerInput(Unit) {
+            detectDragGestures { change, _ ->
+                val center = Offset(size.width.toFloat() / 2, size.height.toFloat() / 2)
+                val touch = change.position
+                val distance = sqrt((touch.x - center.x).pow(2) + (touch.y - center.y).pow(2))
+                val radius = min(size.width.toFloat(), size.height.toFloat()) / 2
+                
+                if (distance <= radius) {
+                    val angle = atan2(touch.y - center.y, touch.x - center.x) * (180 / PI).toFloat()
+                    val hue = (angle + 360) % 360
+                    val saturation = (distance / radius).coerceIn(0f, 1f)
+                    onColorSelected(Color.hsv(hue, saturation, 1f))
+                }
+            }
+        }) {
+        canvasSize = Offset(size.width, size.height)
+        val radius = min(size.width, size.height) / 2
+        val center = Offset(size.width / 2, size.height / 2)
+
+        drawCircle(
+            brush = Brush.sweepGradient(
+                colors = listOf(Color.Red, Color.Magenta, Color.Blue, Color.Cyan, Color.Green, Color.Yellow, Color.Red),
+                center = center
+            ),
+            radius = radius
+        )
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(Color.White, Color.Transparent),
+                center = center,
+                radius = radius
+            ),
+            radius = radius
+        )
+
+        // Calcolo posizione cursore basata su initialColor (HSV)
+        val angleRad = (hsv[0] * PI / 180f).toFloat()
+        val dist = hsv[1] * radius
+        val cursorOffset = Offset(
+            x = center.x + dist * cos(angleRad),
+            y = center.y + dist * sin(angleRad)
+        )
+
+        drawCircle(
+            color = Color.Black,
+            radius = 6.dp.toPx(),
+            center = cursorOffset,
+            style = Stroke(2.dp.toPx())
+        )
+        drawCircle(
+            color = Color.White,
+            radius = 4.dp.toPx(),
+            center = cursorOffset
+        )
+    }
+}
+
+@Composable
+fun PositionControlSection(viewModel: MainViewModel, selectedIds: List<String>, show: Showfile, allProfiles: List<FixtureProfile>) {
+    var pan by remember { mutableFloatStateOf(127f) }
+    var tilt by remember { mutableFloatStateOf(127f) }
+    
+    val colorCyan = Color(0xFF00B4D8)
+    val colorSurfaceAccent = Color(0xFF232834)
+
+    Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("PAD PAN / TILT", color = colorCyan, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            Spacer(modifier = Modifier.height(10.dp))
+            Box(
+                modifier = Modifier
+                    .size(220.dp)
+                    .background(colorSurfaceAccent, RoundedCornerShape(8.dp))
+                    .border(2.dp, colorCyan.copy(0.3f), RoundedCornerShape(8.dp))
+                    .pointerInput(Unit) {
+                        detectDragGestures { change, _ ->
+                            val x = (change.position.x / size.width).coerceIn(0f, 1f)
+                            val y = (change.position.y / size.height).coerceIn(0f, 1f)
+                            pan = x * 255
+                            tilt = y * 255
+                            
+                            // Invio immediato al ViewModel
+                            selectedIds.forEach { fid ->
+                                val inst = show.fixtureInstances.find { it.id == fid } ?: return@forEach
+                                val profile = allProfiles.find { it.id == inst.profileId } ?: return@forEach
+                                profile.channels.forEach { ch ->
+                                    val addr = inst.startAddress - 1 + ch.offset
+                                    if (ch.type == ChannelType.PAN) viewModel.updateDmxChannel(addr, pan.toInt().toByte())
+                                    if (ch.type == ChannelType.TILT) viewModel.updateDmxChannel(addr, tilt.toInt().toByte())
+                                }
+                            }
+                        }
+                    }
+            ) {
+                // Mirino
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val px = (pan / 255) * size.width
+                    val py = (tilt / 255) * size.height
+                    drawLine(colorCyan.copy(0.3f), Offset(px, 0f), Offset(px, size.height), 1.dp.toPx())
+                    drawLine(colorCyan.copy(0.3f), Offset(0f, py), Offset(size.width, py), 1.dp.toPx())
+                    drawCircle(colorCyan, 8.dp.toPx(), Offset(px, py))
+                    drawCircle(Color.White, 8.dp.toPx(), Offset(px, py), style = Stroke(2.dp.toPx()))
+                }
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                Text("PAN: ${pan.toInt()}", color = Color.White, fontSize = 12.sp)
+                Text("TILT: ${tilt.toInt()}", color = Color.White, fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun FaderControlSection(viewModel: MainViewModel, selectedIds: List<String>, show: Showfile, allProfiles: List<FixtureProfile>, dmxData: ByteArray) {
+    val commonChannels = remember(selectedIds, allProfiles) {
+        val selectedInstances = show.fixtureInstances.filter { it.id in selectedIds }
+        if (selectedInstances.isEmpty()) return@remember emptyList<ChannelDefinition>()
+        val firstProfile = allProfiles.find { it.id == selectedInstances.first().profileId }
+        val firstChannels = firstProfile?.channels ?: emptyList()
+        firstChannels.filter { ch1 -> selectedInstances.all { inst -> val p = allProfiles.find { it.id == inst.profileId }; p?.channels?.any { ch2 -> ch2.name == ch1.name && ch2.type == ch1.type } == true } }
+    }
+
+    val colorSurfaceAccent = Color(0xFF232834)
+    val colorCyan = Color(0xFF00B4D8)
+    val colorPurple = Color(0xFF9D4EDD)
+    val colorBackground = Color(0xFF0B0E14)
+    val colorTextPrimary = Color(0xFFF8FAFC)
+
+    if (commonChannels.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Nessun parametro comune selezionato", color = colorTextPrimary.copy(0.4f)) }
+    } else {
+        LazyRow(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(commonChannels, key = { it.name + it.offset }) { ch ->
+                val firstInst = show.fixtureInstances.find { it.id == selectedIds.first() }!!
+                val realDmxFirst = firstInst.startAddress - 1 + ch.offset
+                val valRaw = if (realDmxFirst in dmxData.indices) dmxData[realDmxFirst].toInt() and 0xFF else 0
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxHeight().width(110.dp).background(colorSurfaceAccent, RoundedCornerShape(6.dp)).padding(6.dp)) {
+                    Text(text = ch.name.uppercase(), color = colorCyan, fontSize = 10.sp, maxLines = 1)
+                    if (ch.hasPresets && ch.presets.isNotEmpty()) {
+                        Text(text = ch.presets.find { valRaw in it.from..it.to }?.label ?: "$valRaw", color = colorTextPrimary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Column(modifier = Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            ch.presets.forEach { preset ->
+                                val isCurrent = valRaw in preset.from..preset.to
+                                Box(modifier = Modifier.fillMaxWidth().weight(1f).background(if (isCurrent) colorPurple else colorBackground, RoundedCornerShape(4.dp)).border(1.dp, if (isCurrent) colorCyan else Color.Transparent, RoundedCornerShape(4.dp)).clickable { selectedIds.forEach { fid -> show.fixtureInstances.find { it.id == fid }?.let { inst -> val p = allProfiles.find { it.id == inst.profileId }; val actualCh = p?.channels?.find { it.name == ch.name && it.type == ch.type }; actualCh?.let { viewModel.updateDmxChannel(inst.startAddress - 1 + it.offset, preset.from.toByte()) } } } }.padding(horizontal = 4.dp), contentAlignment = Alignment.Center) {
+                                    Text(preset.label, color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, lineHeight = 10.sp)
+                                }
+                            }
+                        }
+                    } else {
+                        @Suppress("DEPRECATION")
+                        Text(text = "$valRaw", color = colorTextPrimary, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Slider(value = valRaw.toFloat(), onValueChange = { nv -> selectedIds.forEach { fid -> show.fixtureInstances.find { it.id == fid }?.let { inst -> val p = allProfiles.find { it.id == inst.profileId }; val actualCh = p?.channels?.find { it.name == ch.name && it.type == ch.type }; actualCh?.let { viewModel.updateDmxChannel(inst.startAddress - 1 + it.offset, nv.toInt().toByte()) } } } }, valueRange = 0f..255f, colors = SliderDefaults.colors(activeTrackColor = colorPurple, inactiveTrackColor = colorBackground), thumb = { Box(modifier = Modifier.width(24.dp).height(36.dp).background(colorCyan, shape = RoundedCornerShape(4.dp))) }, modifier = Modifier.graphicsLayer { rotationZ = -90f }.layout { measurable, constraints -> val customConstraints = constraints.copy(minWidth = constraints.maxHeight, maxWidth = constraints.maxHeight); val placeable = measurable.measure(customConstraints); layout(placeable.height, placeable.width) { placeable.place(-placeable.width / 2 + placeable.height / 2, -placeable.height / 2 + placeable.width / 2) } }.fillMaxHeight())
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

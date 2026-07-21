@@ -267,15 +267,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun triggerFadeCoroutine(targetCue: Cue): Boolean {
-        val startDmx = _dmxState.value.map { it.toInt() and 0xFF }
         val targetDmx = targetCue.dmxValues
         val duration = targetCue.fadeTimeMs
+
+        // Applica immediatamente il risultato finale
+        val finalBuffer = ByteArray(512)
+        for (i in 0..511) {
+            finalBuffer[i] = targetDmx[i].toByte()
+            artNetService?.dmxData?.set(i, targetDmx[i].toByte())
+        }
+
         if (duration <= 0) {
-            val buffer = ByteArray(512)
-            for (i in 0..511) { buffer[i] = targetDmx[i].toByte(); artNetService?.dmxData?.set(i, targetDmx[i].toByte()) }
-            _dmxState.value = buffer
+            _dmxState.value = finalBuffer
             return true
         }
+
+        // Fade progressivo
+        val startDmx = _dmxState.value.map { it.toInt() and 0xFF }
         val startTime = System.currentTimeMillis()
         var elapsed = 0L
         while (elapsed < duration) {
@@ -291,6 +299,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _dmxState.value = buffer
             delay(dmxFrameRateInterval)
         }
+
+        // Assicura lo stato finale
+        _dmxState.value = finalBuffer
         return true
     }
 
@@ -699,6 +710,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _backupStatus.value = "Errore durante l'importazione: ${e.message}"
             }
         }
+    }
+
+    fun saveCurrentShow() {
+        val show = _currentShow.value
+        val profiles = _userFixtureProfiles.value
+        repository.saveShowfileWithLibrary(show, profiles)
+        _backupStatus.value = "Show '${show.showName}' salvato"
+        addConnectionLog("💾 Show salvato: ${show.showName}")
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        // Salva automaticamente lo show alla chiusura dell'app
+        val show = _currentShow.value
+        val profiles = _userFixtureProfiles.value
+        repository.saveShowfileWithLibrary(show, profiles)
     }
 
     fun clearBackupStatus() { _backupStatus.value = null }

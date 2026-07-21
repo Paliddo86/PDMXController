@@ -103,6 +103,9 @@ fun FaderScreen(viewModel: MainViewModel) {
     var isFixtureEditorOpen by remember { mutableStateOf(false) }
     var editingProfile by remember { mutableStateOf<FixtureProfile?>(null) }
 
+    // Stato per toggle EDIT CUE (default: chiuso)
+    var isCueEditorOpen by remember { mutableStateOf(false) }
+
     // Stati Dialog
     var showMenuExpanded by remember { mutableStateOf(false) }
     var sceneMenuExpanded by remember { mutableStateOf(false) }
@@ -190,7 +193,7 @@ fun FaderScreen(viewModel: MainViewModel) {
     }
     var cueNumberInput by remember { mutableStateOf(TextFieldValue(nextCueNumber)) }
     var cueNameInput by remember { mutableStateOf(TextFieldValue("")) }
-    var cueFadeInput by remember { mutableStateOf(TextFieldValue("2.0")) }
+    var cueFadeInput by remember { mutableStateOf(TextFieldValue("0.0")) }
 
     LaunchedEffect(nextCueNumber) { cueNumberInput = TextFieldValue(nextCueNumber) }
 
@@ -293,6 +296,15 @@ fun FaderScreen(viewModel: MainViewModel) {
 
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (!isLiveMode && !isSettingsOpen) {
+                            if (!isLiveMode) {
+                                Button(onClick = { isCueEditorOpen = !isCueEditorOpen }, colors = ButtonDefaults.buttonColors(containerColor = if (isCueEditorOpen) colorPurple else colorSurfaceAccent), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp), modifier = Modifier.border(1.dp, if (isCueEditorOpen) Color.Transparent else colorPurple.copy(0.5f), RoundedCornerShape(50))) {
+                                    Text("🎬 CUE", color = colorTextPrimary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                                // Pulsante SALVA SHOW
+                                Button(onClick = { viewModel.saveCurrentShow() }, colors = ButtonDefaults.buttonColors(containerColor = colorGreenLive), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp), modifier = Modifier.border(1.dp, colorGreenLive, RoundedCornerShape(50))) {
+                                    Text("💾 SALVA", color = colorBackground, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
                             if (selectedFixtureIds.isNotEmpty()) {
                                 Button(onClick = { groupDialogOpened = true }, colors = ButtonDefaults.buttonColors(containerColor = colorPurple), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)) {
                                     Text("💾 GRUPPO", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
@@ -316,6 +328,28 @@ fun FaderScreen(viewModel: MainViewModel) {
                             }
                         }
                     }
+                }
+
+                // INDICATORE CONNESSIONE (sempre visibile)
+                val connState by viewModel.connectionState.collectAsState()
+                val (statusColor, statusLabel) = when (connState) {
+                    is ConnectionState.Connected -> colorGreenLive to "ARTNET"
+                    is ConnectionState.Scanning -> colorOrange to "SCAN..."
+                    is ConnectionState.Connecting -> colorOrange to "CONN..."
+                    is ConnectionState.Handshaking -> colorOrange to "HANDSHAKE"
+                    is ConnectionState.Disconnected -> colorDisconnected to "OFFLINE"
+                    is ConnectionState.Error -> colorDisconnected to "ERRORE"
+                    is ConnectionState.DiscoveryFailed -> colorDisconnected to "NON TROVATO"
+                    is ConnectionState.Idle -> colorDisconnected to "OFFLINE"
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(modifier = Modifier.size(8.dp).background(statusColor, CircleShape))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(text = statusLabel, color = statusColor, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                 }
 
                 if (isSettingsOpen) {
@@ -573,19 +607,8 @@ fun FaderScreen(viewModel: MainViewModel) {
                 } else {
                     // VISTA WORKSPACE
                     Row(modifier = Modifier.fillMaxSize()) {
-                        if (!isLiveMode) {
-                            Column(modifier = Modifier.width(160.dp).fillMaxHeight().background(colorSurface, RoundedCornerShape(8.dp)).padding(8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Text("EDIT CUE", color = colorPurple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                OutlinedTextField(value = cueNumberInput, onValueChange = { cueNumberInput = it }, label = { Text("Num", fontSize = 10.sp) }, textStyle = TextStyle(color = colorTextPrimary, fontSize = 12.sp), colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = colorSurfaceAccent, focusedBorderColor = colorPurple), modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-                                OutlinedTextField(value = cueNameInput, onValueChange = { cueNameInput = it }, label = { Text("Nome", fontSize = 10.sp) }, textStyle = TextStyle(color = colorTextPrimary, fontSize = 12.sp), colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = colorSurfaceAccent, focusedBorderColor = colorPurple), modifier = Modifier.fillMaxWidth())
-                                OutlinedTextField(value = cueFadeInput, onValueChange = { cueFadeInput = it }, label = { Text("Fade (s)", fontSize = 10.sp) }, textStyle = TextStyle(color = colorTextPrimary, fontSize = 12.sp), colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = colorSurfaceAccent, focusedBorderColor = colorPurple), modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-                                Button(onClick = { val num = cueNumberInput.text.toFloatOrNull() ?: 0f; val fade = cueFadeInput.text.toFloatOrNull() ?: 2.0f; val finalName = if (cueNameInput.text.isEmpty()) "CUE $num" else cueNameInput.text; viewModel.recordCue(num, finalName, fade) }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = colorPurple)) { Text("🔴 RECORD", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
-                                Button(onClick = { val currentCue = currentScene.cueList.getOrNull(currentCueIndex); currentCue?.let { viewModel.duplicateCue(it) } }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = colorSurfaceAccent), enabled = currentCueIndex != -1) { Text("👯 DUPLICA", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                        }
-
-                        Column(modifier = Modifier.weight(if (isLiveMode) 0.65f else 0.5f).fillMaxHeight()) {
+                        // Colonna centrale (sempre visibile): fixture, gruppi, controlli
+                        Column(modifier = Modifier.weight(if (isCueEditorOpen && !isLiveMode) 0.6f else 0.65f).fillMaxHeight()) {
                             if (isLiveMode) {
                                 Box(modifier = Modifier.fillMaxSize().background(colorSurface, shape = RoundedCornerShape(8.dp)).padding(10.dp)) {
                                     LazyVerticalGrid(columns = GridCells.Adaptive(minSize = 110.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -702,64 +725,92 @@ fun FaderScreen(viewModel: MainViewModel) {
                             }
                         }
 
-                        Spacer(modifier = Modifier.width(12.dp))
-
-                        // COLONNA 3: CUE LIST
-                        Column(modifier = Modifier.weight(0.35f).fillMaxHeight().background(Color(0xFF11141A), shape = RoundedCornerShape(8.dp)).padding(10.dp)) {
-                            Row(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Box {
-                                    Text(text = "SCENA: ${currentScene.name} ▾", color = colorPurple, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { sceneMenuExpanded = true })
-                                    DropdownMenu(expanded = sceneMenuExpanded, onDismissRequest = { sceneMenuExpanded = false }, modifier = Modifier.background(colorSurface)) {
-                                        currentShow.scenes.forEachIndexed { idx, scene ->
-                                            DropdownMenuItem(
-                                                text = { Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(scene.name, color = colorTextPrimary, modifier = Modifier.weight(1f)); if (currentShow.scenes.size > 1) { Text("🗑", color = colorDisconnected, modifier = Modifier.clickable { sceneToDeleteIndex = idx; sceneMenuExpanded = false }.padding(8.dp)) } } },
-                                                onClick = { viewModel.selectScene(idx); sceneMenuExpanded = false }
-                                            )
-                                        }
-                                        HorizontalDivider(color = colorSurfaceAccent)
-                                        DropdownMenuItem(text = { Text("+ Nuova Scena", color = colorCyan) }, onClick = { createSceneDialogOpened = true; sceneMenuExpanded = false })
+                        // Pannello CUE unificato (solo se EDIT mode e isCueEditorOpen)
+                        if (!isLiveMode && isCueEditorOpen) {
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(0.35f).fillMaxHeight().background(Color(0xFF11141A), shape = RoundedCornerShape(8.dp)).padding(10.dp)) {
+                                // --- SEZIONE 1: RECORD CUE ---
+                                Text("EDIT CUE", color = colorPurple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    OutlinedTextField(value = cueNumberInput, onValueChange = { cueNumberInput = it }, label = { Text("Num", fontSize = 9.sp) }, textStyle = TextStyle(color = colorTextPrimary, fontSize = 11.sp), colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = colorSurfaceAccent, focusedBorderColor = colorPurple), modifier = Modifier.weight(0.3f).height(50.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                                    OutlinedTextField(value = cueNameInput, onValueChange = { cueNameInput = it }, label = { Text("Nome", fontSize = 9.sp) }, textStyle = TextStyle(color = colorTextPrimary, fontSize = 11.sp), colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = colorSurfaceAccent, focusedBorderColor = colorPurple), modifier = Modifier.weight(0.7f).height(50.dp), singleLine = true)
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Button(onClick = {
+                                        val num = cueNumberInput.text.toFloatOrNull() ?: 0f
+                                        val fade = cueFadeInput.text.toFloatOrNull() ?: 0.0f
+                                        val finalName = if (cueNameInput.text.isEmpty()) "CUE $num" else cueNameInput.text
+                                        viewModel.recordCue(num, finalName, fade)
+                                    }, modifier = Modifier.weight(1f).height(36.dp), colors = ButtonDefaults.buttonColors(containerColor = colorPurple), contentPadding = PaddingValues(0.dp)) {
+                                        Text("🔴 RECORD", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    Button(onClick = {
+                                        val currentCue = currentScene.cueList.getOrNull(currentCueIndex)
+                                        currentCue?.let { viewModel.duplicateCue(it) }
+                                    }, modifier = Modifier.weight(0.6f).height(36.dp), colors = ButtonDefaults.buttonColors(containerColor = colorSurfaceAccent), enabled = currentCueIndex != -1, contentPadding = PaddingValues(0.dp)) {
+                                        Text("👯 DUPLICA", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
-                                val connState by viewModel.connectionState.collectAsState()
-                                val (statusColor, statusLabel) = when (connState) {
-                                    is ConnectionState.Connected -> colorGreenLive to "ARTNET"
-                                    is ConnectionState.Scanning -> colorOrange to "SCAN..."
-                                    is ConnectionState.Connecting -> colorOrange to "CONN..."
-                                    is ConnectionState.Handshaking -> colorOrange to "HANDSHAKE"
-                                    is ConnectionState.Disconnected -> colorDisconnected to "OFFLINE"
-                                    is ConnectionState.Error -> colorDisconnected to "ERRORE"
-                                    is ConnectionState.DiscoveryFailed -> colorDisconnected to "NON TROVATO"
-                                    is ConnectionState.Idle -> colorDisconnected to "OFFLINE"
-                                }
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(modifier = Modifier.size(8.dp).background(statusColor, CircleShape))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(text = statusLabel, color = statusColor, fontSize = 9.sp)
-                                }
-                            }
 
-                            Box(modifier = Modifier.weight(1f).fillMaxWidth().border(1.dp, colorSurfaceAccent, RoundedCornerShape(4.dp)).padding(4.dp)) {
-                                LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    itemsIndexed(currentScene.cueList) { index, cue ->
-                                        val isSelected = index == currentCueIndex
-                                        val isActive = index == runningCueIndex
-                                        val bgColor = when { isActive && isSelected -> colorGreenLive.copy(0.4f); isActive -> colorGreenLive.copy(0.2f); isSelected -> colorPurple.copy(0.4f); else -> Color.Transparent }
-                                        val textColor = when { isActive -> colorGreenLive; isSelected -> colorCyan; else -> colorTextPrimary }
-                                        Row(modifier = Modifier.fillMaxWidth().background(bgColor, shape = RoundedCornerShape(4.dp)).border(width = 1.dp, color = if (isSelected) colorCyan.copy(0.5f) else Color.Transparent, shape = RoundedCornerShape(4.dp)).clickable { if (isSingleModeEnabled || isLiveMode) viewModel.selectCueManually(index) else viewModel.triggerFadeToCue(index) }.padding(8.dp)) {
-                                            Text(text = "${cue.number}: ${cue.name}", color = textColor, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                                            if (!isLiveMode) Text("✕", color = colorDisconnected, modifier = Modifier.clickable { viewModel.deleteCue(index) })
+                                // --- SEZIONE 2: FADE (campo numerico) ---
+                                Spacer(modifier = Modifier.height(8.dp))
+                                OutlinedTextField(
+                                    value = cueFadeInput,
+                                    onValueChange = { cueFadeInput = it },
+                                    label = { Text("Fade (s)", fontSize = 9.sp) },
+                                    textStyle = TextStyle(color = colorTextPrimary, fontSize = 11.sp),
+                                    colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = colorSurfaceAccent, focusedBorderColor = colorCyan),
+                                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                    singleLine = true,
+                                    trailingIcon = {
+                                        Text("sec", color = colorTextPrimary.copy(0.4f), fontSize = 10.sp)
+                                    }
+                                )
+                                HorizontalDivider(color = colorSurfaceAccent, thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
+
+                                // --- SEZIONE 3: SCENA E CUE LIST ---
+                                Row(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                    Box {
+                                        Text(text = "SCENA: ${currentScene.name} ▾", color = colorPurple, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { sceneMenuExpanded = true })
+                                        DropdownMenu(expanded = sceneMenuExpanded, onDismissRequest = { sceneMenuExpanded = false }, modifier = Modifier.background(colorSurface)) {
+                                            currentShow.scenes.forEachIndexed { idx, scene ->
+                                                DropdownMenuItem(
+                                                    text = { Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(scene.name, color = colorTextPrimary, modifier = Modifier.weight(1f)); if (currentShow.scenes.size > 1) { Text("🗑", color = colorDisconnected, modifier = Modifier.clickable { sceneToDeleteIndex = idx; sceneMenuExpanded = false }.padding(8.dp)) } } },
+                                                    onClick = { viewModel.selectScene(idx); sceneMenuExpanded = false }
+                                                )
+                                            }
+                                            HorizontalDivider(color = colorSurfaceAccent)
+                                            DropdownMenuItem(text = { Text("+ Nuova Scena", color = colorCyan) }, onClick = { createSceneDialogOpened = true; sceneMenuExpanded = false })
                                         }
                                     }
                                 }
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Button(onClick = { viewModel.toggleSingleMode() }, modifier = Modifier.weight(0.5f).height(38.dp), colors = ButtonDefaults.buttonColors(containerColor = if (isSingleModeEnabled) colorPurple else colorSurfaceAccent), shape = RoundedCornerShape(4.dp)) { Text(if (isSingleModeEnabled) "🎯 SINGLE" else "⏭️ NEXT", fontSize = 9.sp) }
-                                    Button(onClick = { viewModel.toggleLoop() }, modifier = Modifier.weight(0.5f).height(38.dp), colors = ButtonDefaults.buttonColors(containerColor = if (isLoopEnabled) colorCyan else colorSurfaceAccent), shape = RoundedCornerShape(4.dp)) { Text("AUTOLOOP", fontSize = 9.sp) }
+
+                                Box(modifier = Modifier.weight(1f).fillMaxWidth().border(1.dp, colorSurfaceAccent, RoundedCornerShape(4.dp)).padding(4.dp)) {
+                                    LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        itemsIndexed(currentScene.cueList) { index, cue ->
+                                            val isSelected = index == currentCueIndex
+                                            val isActive = index == runningCueIndex
+                                            val bgColor = when { isActive && isSelected -> colorGreenLive.copy(0.4f); isActive -> colorGreenLive.copy(0.2f); isSelected -> colorPurple.copy(0.4f); else -> Color.Transparent }
+                                            val textColor = when { isActive -> colorGreenLive; isSelected -> colorCyan; else -> colorTextPrimary }
+                                            Row(modifier = Modifier.fillMaxWidth().background(bgColor, shape = RoundedCornerShape(4.dp)).border(width = 1.dp, color = if (isSelected) colorCyan.copy(0.5f) else Color.Transparent, shape = RoundedCornerShape(4.dp)).clickable { if (isSingleModeEnabled) viewModel.selectCueManually(index) else viewModel.triggerFadeToCue(index) }.padding(8.dp)) {
+                                                Text(text = "${cue.number}: ${cue.name}", color = textColor, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                                                Text("✕", color = colorDisconnected, modifier = Modifier.clickable { viewModel.deleteCue(index) })
+                                            }
+                                        }
+                                    }
                                 }
-                                val isRunning by viewModel.isSequenceRunning.collectAsState()
-                                Button(onClick = { viewModel.handleGoStopAction() }, modifier = Modifier.fillMaxWidth().height(55.dp), colors = ButtonDefaults.buttonColors(containerColor = if (isRunning) colorDisconnected else if (isSingleModeEnabled) colorCyan else colorPurple), shape = RoundedCornerShape(6.dp)) { Text(if (isRunning) "STOP" else if (isSingleModeEnabled) "GO (SEL)" else "GO", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold) }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Button(onClick = { viewModel.toggleSingleMode() }, modifier = Modifier.weight(0.5f).height(38.dp), colors = ButtonDefaults.buttonColors(containerColor = if (isSingleModeEnabled) colorPurple else colorSurfaceAccent), shape = RoundedCornerShape(4.dp)) { Text(if (isSingleModeEnabled) "🎯 SINGLE" else "⏭️ NEXT", fontSize = 9.sp) }
+                                        Button(onClick = { viewModel.toggleLoop() }, modifier = Modifier.weight(0.5f).height(38.dp), colors = ButtonDefaults.buttonColors(containerColor = if (isLoopEnabled) colorCyan else colorSurfaceAccent), shape = RoundedCornerShape(4.dp)) { Text("AUTOLOOP", fontSize = 9.sp) }
+                                    }
+                                    val isRunning by viewModel.isSequenceRunning.collectAsState()
+                                    Button(onClick = { viewModel.handleGoStopAction() }, modifier = Modifier.fillMaxWidth().height(55.dp), colors = ButtonDefaults.buttonColors(containerColor = if (isRunning) colorDisconnected else if (isSingleModeEnabled) colorCyan else colorPurple), shape = RoundedCornerShape(6.dp)) { Text(if (isRunning) "STOP" else if (isSingleModeEnabled) "GO (SEL)" else "GO", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold) }
+                                }
                             }
                         }
                     }
@@ -884,7 +935,7 @@ fun ColorControlSection(
     Column(modifier = Modifier.fillMaxSize()) {
         Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
             // COLOR PICKER (CANVAS)
-            Box(modifier = Modifier.weight(0.5f).aspectRatio(1f).padding(8.dp)) {
+            Box(modifier = Modifier.weight(0.25f).aspectRatio(0.7f).padding(8.dp)) {
                 ColorWheel(initialColor = currentColor) { color ->
                     onColorChange(color)
                     viewModel.applyColorToSelected(selectedIds, (color.red * 255).toInt(), (color.green * 255).toInt(), (color.blue * 255).toInt())
@@ -947,24 +998,56 @@ fun ColorControlSection(
             }
         }
 
-        // ELENCO PALETTE
-        Text("PALETTE SALVATE", color = colorPurple, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
-        LazyRow(modifier = Modifier.fillMaxWidth().height(60.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 4.dp)) {
-            items(palettes) { palette ->
-                val pColor = Color(android.graphics.Color.parseColor(palette.hexCode))
+        // Palette colori di base (sempre disponibili)
+        Text("COLORI BASE", color = colorCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
+        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            val baseColors = listOf(
+                "Rosso" to Color.Red,
+                "Verde" to Color.Green,
+                "Blu" to Color.Blue,
+                "Giallo" to Color.Yellow,
+                "Ciano" to Color.Cyan,
+                "Magenta" to Color.Magenta,
+                "Bianco" to Color.White,
+                "Arancione" to Color(0xFFFFA500)
+            )
+            baseColors.forEach { (name, color) ->
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
-                        .width(70.dp)
-                        .background(colorSurfaceAccent, RoundedCornerShape(4.dp))
-                        .clickable { 
-                            onColorChange(pColor)
-                            viewModel.applyColorToSelected(selectedIds, palette.r, palette.g, palette.b) 
+                        .width(48.dp)
+                        .clickable {
+                            onColorChange(color)
+                            viewModel.applyColorToSelected(selectedIds, (color.red * 255).toInt(), (color.green * 255).toInt(), (color.blue * 255).toInt())
                         }
-                        .padding(4.dp)
+                        .padding(2.dp)
                 ) {
-                    Box(modifier = Modifier.size(24.dp).background(pColor, CircleShape).border(1.dp, Color.White.copy(0.3f), CircleShape))
-                    Text(palette.name, color = colorTextPrimary, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Box(modifier = Modifier.size(28.dp).background(color, CircleShape).border(1.dp, Color.White.copy(0.3f), CircleShape))
+                    Text(name, color = colorTextPrimary, fontSize = 7.sp, maxLines = 1, textAlign = TextAlign.Center)
+                }
+            }
+        }
+
+        // ELENCO PALETTE SALVATE
+        if (palettes.isNotEmpty()) {
+            Text("PALETTE SALVATE", color = colorPurple, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
+            LazyRow(modifier = Modifier.fillMaxWidth().height(60.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 4.dp)) {
+                items(palettes) { palette ->
+                    val pColor = Color(android.graphics.Color.parseColor(palette.hexCode))
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .width(70.dp)
+                            .background(colorSurfaceAccent, RoundedCornerShape(4.dp))
+                            .clickable { 
+                                onColorChange(pColor)
+                                viewModel.applyColorToSelected(selectedIds, palette.r, palette.g, palette.b) 
+                            }
+                            .padding(4.dp)
+                    ) {
+                        Box(modifier = Modifier.size(24.dp).background(pColor, CircleShape).border(1.dp, Color.White.copy(0.3f), CircleShape))
+                        Text(palette.name, color = colorTextPrimary, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
             }
         }
@@ -1096,6 +1179,26 @@ fun PositionControlSection(viewModel: MainViewModel, selectedIds: List<String>, 
     }
 }
 
+private fun updateDmxChannelToZero(viewModel: MainViewModel, selectedIds: List<String>, show: Showfile, allProfiles: List<FixtureProfile>, ch: ChannelDefinition) {
+    selectedIds.forEach { fid ->
+        show.fixtureInstances.find { it.id == fid }?.let { inst ->
+            val p = allProfiles.find { it.id == inst.profileId }
+            val actualCh = p?.channels?.find { it.name == ch.name && it.type == ch.type }
+            actualCh?.let { viewModel.updateDmxChannel(inst.startAddress - 1 + it.offset, 0) }
+        }
+    }
+}
+
+private fun updateDmxChannelValue(viewModel: MainViewModel, selectedIds: List<String>, show: Showfile, allProfiles: List<FixtureProfile>, ch: ChannelDefinition, value: Int) {
+    selectedIds.forEach { fid ->
+        show.fixtureInstances.find { it.id == fid }?.let { inst ->
+            val p = allProfiles.find { it.id == inst.profileId }
+            val actualCh = p?.channels?.find { it.name == ch.name && it.type == ch.type }
+            actualCh?.let { viewModel.updateDmxChannel(inst.startAddress - 1 + it.offset, value.toByte()) }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FaderControlSection(viewModel: MainViewModel, selectedIds: List<String>, show: Showfile, allProfiles: List<FixtureProfile>, dmxData: ByteArray) {
@@ -1112,6 +1215,10 @@ fun FaderControlSection(viewModel: MainViewModel, selectedIds: List<String>, sho
     val colorPurple = Color(0xFF9D4EDD)
     val colorBackground = Color(0xFF0B0E14)
     val colorTextPrimary = Color(0xFFF8FAFC)
+    val colorDisconnected = Color(0xFFEF4444)
+
+    // Stato toggle per ogni canale: false = vista preset, true = vista fader
+    val useFaderForChannels = remember { mutableStateMapOf<String, Boolean>() }
 
     if (commonChannels.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Nessun parametro comune selezionato", color = colorTextPrimary.copy(0.4f)) }
@@ -1121,25 +1228,135 @@ fun FaderControlSection(viewModel: MainViewModel, selectedIds: List<String>, sho
                 val firstInst = show.fixtureInstances.find { it.id == selectedIds.first() }!!
                 val realDmxFirst = firstInst.startAddress - 1 + ch.offset
                 val valRaw = if (realDmxFirst in dmxData.indices) dmxData[realDmxFirst].toInt() and 0xFF else 0
+                val channelKey = "${ch.name}_${ch.offset}"
+                val showFader = useFaderForChannels[channelKey] ?: false
+
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxHeight().width(110.dp).background(colorSurfaceAccent, RoundedCornerShape(6.dp)).padding(6.dp)) {
+                    // Nome canale
                     Text(text = ch.name.uppercase(), color = colorCyan, fontSize = 10.sp, maxLines = 1)
+
                     if (ch.hasPresets && ch.presets.isNotEmpty()) {
+                        // Label del valore attuale
                         Text(text = ch.presets.find { valRaw in it.from..it.to }?.label ?: "$valRaw", color = colorTextPrimary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+
                         Spacer(modifier = Modifier.height(4.dp))
-                        Column(modifier = Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            ch.presets.forEach { preset ->
-                                val isCurrent = valRaw in preset.from..preset.to
-                                Box(modifier = Modifier.fillMaxWidth().weight(1f).background(if (isCurrent) colorPurple else colorBackground, RoundedCornerShape(4.dp)).border(1.dp, if (isCurrent) colorCyan else Color.Transparent, RoundedCornerShape(4.dp)).clickable { selectedIds.forEach { fid -> show.fixtureInstances.find { it.id == fid }?.let { inst -> val p = allProfiles.find { it.id == inst.profileId }; val actualCh = p?.channels?.find { it.name == ch.name && it.type == ch.type }; actualCh?.let { viewModel.updateDmxChannel(inst.startAddress - 1 + it.offset, preset.from.toByte()) } } } }.padding(horizontal = 4.dp), contentAlignment = Alignment.Center) {
-                                    Text(preset.label, color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, lineHeight = 10.sp)
+
+                        // Pulsante ZERO + Toggle PRESET/FADER
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            // Pulsante "0" per azzerare
+                            Box(
+                                modifier = Modifier
+                                    .weight(0.4f)
+                                    .background(colorDisconnected.copy(0.3f), RoundedCornerShape(4.dp))
+                                    .border(1.dp, colorDisconnected, RoundedCornerShape(4.dp))
+                                    .clickable { updateDmxChannelToZero(viewModel, selectedIds, show, allProfiles, ch) }
+                                    .padding(vertical = 4.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("RESET", color = colorDisconnected, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            // Toggle PRESET / FADER
+                            Box(
+                                modifier = Modifier
+                                    .weight(0.6f)
+                                    .background(if (showFader) colorPurple.copy(0.3f) else colorCyan.copy(0.3f), RoundedCornerShape(4.dp))
+                                    .border(1.dp, if (showFader) colorPurple else colorCyan, RoundedCornerShape(4.dp))
+                                    .clickable { useFaderForChannels[channelKey] = !showFader }
+                                    .padding(vertical = 4.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    if (showFader) "FADER" else "PRESET",
+                                    color = if (showFader) colorPurple else colorCyan,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        // Contenuto variabile: Preset buttons o Fader verticale
+                        if (showFader) {
+                            // Modalità FADER: slider verticale
+                            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                Slider(
+                                    value = valRaw.toFloat(),
+                                    onValueChange = { nv -> updateDmxChannelValue(viewModel, selectedIds, show, allProfiles, ch, nv.toInt()) },
+                                    valueRange = 0f..255f,
+                                    colors = SliderDefaults.colors(activeTrackColor = colorPurple, inactiveTrackColor = colorBackground),
+                                    thumb = { Box(modifier = Modifier.width(24.dp).height(36.dp).background(colorCyan, shape = RoundedCornerShape(4.dp))) },
+                                    modifier = Modifier
+                                        .graphicsLayer { rotationZ = -90f }
+                                        .layout { measurable, constraints ->
+                                            val customConstraints = constraints.copy(minWidth = constraints.maxHeight, maxWidth = constraints.maxHeight)
+                                            val placeable = measurable.measure(customConstraints)
+                                            layout(placeable.height, placeable.width) { placeable.place(-placeable.width / 2 + placeable.height / 2, -placeable.height / 2 + placeable.width / 2) }
+                                        }
+                                        .fillMaxHeight()
+                                )
+                            }
+                        } else {
+                            // Modalità PRESET: bottoni macro
+                            Column(modifier = Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                ch.presets.forEach { preset ->
+                                    val isCurrent = valRaw in preset.from..preset.to
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .weight(1f)
+                                            .background(if (isCurrent) colorPurple else colorBackground, RoundedCornerShape(4.dp))
+                                            .border(1.dp, if (isCurrent) colorCyan else Color.Transparent, RoundedCornerShape(4.dp))
+                                            .clickable { updateDmxChannelValue(viewModel, selectedIds, show, allProfiles, ch, preset.from) }
+                                            .padding(horizontal = 4.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(preset.label, color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, lineHeight = 10.sp)
+                                    }
                                 }
                             }
                         }
                     } else {
+                        // Canale SENZA preset: mostra valore + fader + pulsante zero
                         @Suppress("DEPRECATION")
                         Text(text = "$valRaw", color = colorTextPrimary, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Pulsante "0" per azzerare
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(colorDisconnected.copy(0.3f), RoundedCornerShape(4.dp))
+                                .border(1.dp, colorDisconnected, RoundedCornerShape(4.dp))
+                                .clickable { updateDmxChannelToZero(viewModel, selectedIds, show, allProfiles, ch) }
+                                .padding(vertical = 2.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("RESET", color = colorDisconnected, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Slider verticale
                         Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Slider(value = valRaw.toFloat(), onValueChange = { nv -> selectedIds.forEach { fid -> show.fixtureInstances.find { it.id == fid }?.let { inst -> val p = allProfiles.find { it.id == inst.profileId }; val actualCh = p?.channels?.find { it.name == ch.name && it.type == ch.type }; actualCh?.let { viewModel.updateDmxChannel(inst.startAddress - 1 + it.offset, nv.toInt().toByte()) } } } }, valueRange = 0f..255f, colors = SliderDefaults.colors(activeTrackColor = colorPurple, inactiveTrackColor = colorBackground), thumb = { Box(modifier = Modifier.width(24.dp).height(36.dp).background(colorCyan, shape = RoundedCornerShape(4.dp))) }, modifier = Modifier.graphicsLayer { rotationZ = -90f }.layout { measurable, constraints -> val customConstraints = constraints.copy(minWidth = constraints.maxHeight, maxWidth = constraints.maxHeight); val placeable = measurable.measure(customConstraints); layout(placeable.height, placeable.width) { placeable.place(-placeable.width / 2 + placeable.height / 2, -placeable.height / 2 + placeable.width / 2) } }.fillMaxHeight())
+                            Slider(
+                                value = valRaw.toFloat(),
+                                onValueChange = { nv -> updateDmxChannelValue(viewModel, selectedIds, show, allProfiles, ch, nv.toInt()) },
+                                valueRange = 0f..255f,
+                                colors = SliderDefaults.colors(activeTrackColor = colorPurple, inactiveTrackColor = colorBackground),
+                                thumb = { Box(modifier = Modifier.width(24.dp).height(36.dp).background(colorCyan, shape = RoundedCornerShape(4.dp))) },
+                                modifier = Modifier
+                                    .graphicsLayer { rotationZ = -90f }
+                                    .layout { measurable, constraints ->
+                                        val customConstraints = constraints.copy(minWidth = constraints.maxHeight, maxWidth = constraints.maxHeight)
+                                        val placeable = measurable.measure(customConstraints)
+                                        layout(placeable.height, placeable.width) { placeable.place(-placeable.width / 2 + placeable.height / 2, -placeable.height / 2 + placeable.width / 2) }
+                                    }
+                                    .fillMaxHeight()
+                            )
                         }
                     }
                 }

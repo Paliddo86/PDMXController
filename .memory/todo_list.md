@@ -43,23 +43,23 @@
 - [x] PATCH dialog
 - [x] Connection indicator always visible
 - [x] EDIT/LIVE mode toggle
+- [x] Splashscreen animato con icona, titolo e crediti
+- [x] Nuova icona app vettoriale (tema viola/ciano/bianco/nero)
 
 ### Bug Fixes
 - [x] animateItemPlacement compilation error
 - [x] Coroutine cancellation in ConnectionManager
 - [x] Icon status in FaderScreen (connectionState instead of isConnected)
 - [x] Fade cue not applying (buffer sync fix)
-- [x] Color wheel oversized / colori invertiti (ordine gradiente corretto, fix resize)
+- [x] Color wheel — gradienti invertiti corretti, fix resize
 - [x] Slider fade UX (replaced with numeric input)
-- [x] RGB→RGBW: sottrazione bianco da canali R,G,B in applyColorToSelected
-- [x] Master Dimmer: scala canali COLOR_* se non c'è DIMMER nel profilo
-- [x] BLACKOUT: invia buffer di zeri a tutti i 512 canali invece di scalare master
+- [x] RGB→RGBW: sottrazione bianco da canali R,G,B
+- [x] Master Dimmer: scala canali COLOR_* se non c'è DIMMER
+- [x] BLACKOUT: invia buffer di zeri a tutti i 512 canali
+- [x] Live mode: mostra griglia cue cards + lista cue + GO/STOP
+- [x] Altezza campi edit cue: Num, Nome, Fade portati a 64dp
 
 ## Pending Features 🔲
-
-### High Priority (Bug Fixes)
-- [ ] **Live mode cue list**: mostrare sempre la colonna cue list + GO/STOP in live mode, nascondere solo le parti di edit
-- [ ] **Altezza campi edit cue**: testo tagliato in basso nei TextField (aumentare altezza)
 
 ### Medium Priority
 - [ ] **Show import merge**: when importing a show, if a profile with the same ID already exists in the user library, show a diff/merge dialog
@@ -74,10 +74,6 @@
 - [ ] **Tablet landscape optimization**: improve for portrait/split-screen
 - [ ] **Backup to cloud**: Google Drive / Dropbox integration
 - [ ] **Multiple device management**: store configs for multiple ESP32 controllers
-
-### New Features
-- [ ] **Nuova icona app**: tema viola/ciano/bianco/nero
-- [ ] **Splashscreen**: stesso stile dell'icona
 
 ### Known Issues
 - [ ] **No loading indicator** when loading a showfile from disk (could freeze UI briefly)

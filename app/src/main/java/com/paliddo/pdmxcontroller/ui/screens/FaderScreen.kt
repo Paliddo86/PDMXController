@@ -757,8 +757,8 @@ fun FaderScreen(viewModel: MainViewModel) {
                                     Text("EDIT CUE", color = colorPurple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        OutlinedTextField(value = cueNumberInput, onValueChange = { cueNumberInput = it }, label = { Text("Num", fontSize = 9.sp) }, textStyle = TextStyle(color = colorTextPrimary, fontSize = 11.sp), colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = colorSurfaceAccent, focusedBorderColor = colorPurple), modifier = Modifier.weight(0.3f).height(50.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-                                        OutlinedTextField(value = cueNameInput, onValueChange = { cueNameInput = it }, label = { Text("Nome", fontSize = 9.sp) }, textStyle = TextStyle(color = colorTextPrimary, fontSize = 11.sp), colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = colorSurfaceAccent, focusedBorderColor = colorPurple), modifier = Modifier.weight(0.7f).height(50.dp), singleLine = true)
+                                        OutlinedTextField(value = cueNumberInput, onValueChange = { cueNumberInput = it }, label = { Text("Num", fontSize = 9.sp) }, textStyle = TextStyle(color = colorTextPrimary, fontSize = 11.sp), colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = colorSurfaceAccent, focusedBorderColor = colorPurple), modifier = Modifier.weight(0.3f).height(64.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                                        OutlinedTextField(value = cueNameInput, onValueChange = { cueNameInput = it }, label = { Text("Nome", fontSize = 9.sp) }, textStyle = TextStyle(color = colorTextPrimary, fontSize = 11.sp), colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = colorSurfaceAccent, focusedBorderColor = colorPurple), modifier = Modifier.weight(0.7f).height(64.dp), singleLine = true)
                                     }
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -786,7 +786,7 @@ fun FaderScreen(viewModel: MainViewModel) {
                                         label = { Text("Fade (s)", fontSize = 9.sp) },
                                         textStyle = TextStyle(color = colorTextPrimary, fontSize = 11.sp),
                                         colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = colorSurfaceAccent, focusedBorderColor = colorCyan),
-                                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                                        modifier = Modifier.fillMaxWidth().height(64.dp),
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                         singleLine = true,
                                         trailingIcon = {

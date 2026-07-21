@@ -13,7 +13,7 @@
 ### DMX Protocol
 - [x] Art-Net standard compliance (Start Code 0x00, 531 byte packets)
 - [x] DMX streaming at 30fps
-- [x] Grand Master dimmer control
+- [x] Grand Master dimmer control (scales DIMMER directly, or COLOR_* if no DIMMER)
 - [x] RESET button for all channels
 - [x] PRESET/FADER toggle for preset-enabled channels
 
@@ -48,29 +48,22 @@
 - [x] Coroutine cancellation in ConnectionManager
 - [x] Icon status in FaderScreen (connectionState instead of isConnected)
 - [x] Fade cue not applying (buffer sync fix)
-- [x] Color wheel oversized (reduced to 0.25 weight)
+- [x] Color wheel oversized / colori invertiti (ordine gradiente corretto, fix resize)
 - [x] Slider fade UX (replaced with numeric input)
+- [x] RGB→RGBW: sottrazione bianco da canali R,G,B in applyColorToSelected
+- [x] Master Dimmer: scala canali COLOR_* se non c'è DIMMER nel profilo
 
 ## Pending Features 🔲
 
-### High Priority
+### High Priority (Bug Fixes)
+- [ ] **Blackout**: forzare tutti i 512 canali a 0 invece di solo master dimmer
+- [ ] **Live mode cue list**: mostrare sempre cue list + GO/STOP in live mode, nascondere solo edit
+- [ ] **Altezza campi edit cue**: testo tagliato in basso nei TextField
+
+### Medium Priority
 - [ ] **Show import merge**: when importing a show, if a profile with the same ID already exists in the user library, show a diff/merge dialog instead of just saving to the show's customProfiles
 - [ ] **Multiple universe support**: current Art-Net implementation only handles universe 0
 - [ ] **DMX monitor view**: live readout of all 512 channels (currently only in ESP32 web interface)
-
-### Medium Priority
-- [ ] **Fixture profile editor improvements**: 
-  - Add channel reordering (drag & drop)
-  - Import/export single profile as JSON
-  - Preview channel footprint in the editor
-- [ ] **Cue list improvements**:
-  - Drag to reorder cues in the list
-  - Multi-select cues for batch delete
-  - Cue timing display (show fade time in the list)
-- [ ] **Group improvements**:
-  - Show fixture count in group buttons
-  - Allow adding fixtures to existing groups
-  - Group color coding
 
 ### Low Priority
 - [ ] **Undo/Redo system**: track showfile modifications for undo support
@@ -81,7 +74,11 @@
 - [ ] **Backup to cloud**: Google Drive / Dropbox integration for showfiles
 - [ ] **Multiple device management**: store configurations for multiple ESP32 controllers
 
-### Known Issues
-- [ ] **Color wheel HSV still uses full canvas size** in its Modifier (`.fillMaxSize()`) even though parent Box is constrained — this works but could be optimized
+### New Features
+- [ ] **Nuova icona app**: tema viola/ciano/bianco/nero
+- [ ] **Splashscreen**: stesso stile dell'icona
+
+### Known Issues (Deprecati/Risolti)
+- [x] ~~Color wheel HSV still uses full canvas size~~ (Risolto: gradiente corretto, rimossi aspectRatio conflittuali)
 - [ ] **No loading indicator** when loading a showfile from disk (could freeze UI briefly for large shows)
 - [ ] **No confirmation dialog** before deleting a cue (immediate deletion with ✕)

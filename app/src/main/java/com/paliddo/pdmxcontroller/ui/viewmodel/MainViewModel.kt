@@ -544,8 +544,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             for (fixture in show.fixtureInstances) {
                 val profile = allProfiles.find { it.id == fixture.profileId } ?: continue
                 val channels = profile.channels ?: emptyList()
+                
+                // Se la fixture ha un canale DIMMER dedicato, scala quello
+                val hasDimmer = channels.any { it.type == ChannelType.DIMMER }
+                // Se non ha dimmer ma ha canali colore, scala i canali colore
+                val hasColor = channels.any { it.type in listOf(ChannelType.COLOR_R, ChannelType.COLOR_G, ChannelType.COLOR_B, ChannelType.COLOR_W) }
+                
+                val targetTypes = if (hasDimmer) {
+                    listOf(ChannelType.DIMMER)
+                } else if (hasColor) {
+                    listOf(ChannelType.COLOR_R, ChannelType.COLOR_G, ChannelType.COLOR_B, ChannelType.COLOR_W)
+                } else {
+                    emptyList()
+                }
+                
                 for (channel in channels) {
-                    if (channel.type == ChannelType.DIMMER) {
+                    if (channel.type in targetTypes) {
                         val absoluteAddress = (fixture.startAddress - 1) + channel.offset
                         if (absoluteAddress in 0..511) {
                             dimmerAddresses.add(absoluteAddress)

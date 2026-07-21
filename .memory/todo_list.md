@@ -16,6 +16,7 @@
 - [x] Grand Master dimmer control (scales DIMMER directly, or COLOR_* if no DIMMER)
 - [x] RESET button for all channels
 - [x] PRESET/FADER toggle for preset-enabled channels
+- [x] BLACKOUT mode: forza tutti i 512 canali a 0 via flag isBlackout
 
 ### Data Model & Persistence
 - [x] Showfile data classes (Showfile, Scene, Cue, FixtureInstance, etc.)
@@ -29,7 +30,7 @@
 
 ### UI
 - [x] Main workspace layout (3 columns)
-- [x] Master fader + BLACKOUT button
+- [x] Master fader + BLACKOUT button (indipendente dal master)
 - [x] Group selection grid
 - [x] Fixture selection grid
 - [x] Color control (ColorWheel + palettes + 8 base colors)
@@ -52,33 +53,32 @@
 - [x] Slider fade UX (replaced with numeric input)
 - [x] RGB→RGBW: sottrazione bianco da canali R,G,B in applyColorToSelected
 - [x] Master Dimmer: scala canali COLOR_* se non c'è DIMMER nel profilo
+- [x] BLACKOUT: invia buffer di zeri a tutti i 512 canali invece di scalare master
 
 ## Pending Features 🔲
 
 ### High Priority (Bug Fixes)
-- [ ] **Blackout**: forzare tutti i 512 canali a 0 invece di solo master dimmer
-- [ ] **Live mode cue list**: mostrare sempre cue list + GO/STOP in live mode, nascondere solo edit
-- [ ] **Altezza campi edit cue**: testo tagliato in basso nei TextField
+- [ ] **Live mode cue list**: mostrare sempre la colonna cue list + GO/STOP in live mode, nascondere solo le parti di edit
+- [ ] **Altezza campi edit cue**: testo tagliato in basso nei TextField (aumentare altezza)
 
 ### Medium Priority
-- [ ] **Show import merge**: when importing a show, if a profile with the same ID already exists in the user library, show a diff/merge dialog instead of just saving to the show's customProfiles
+- [ ] **Show import merge**: when importing a show, if a profile with the same ID already exists in the user library, show a diff/merge dialog
 - [ ] **Multiple universe support**: current Art-Net implementation only handles universe 0
-- [ ] **DMX monitor view**: live readout of all 512 channels (currently only in ESP32 web interface)
+- [ ] **DMX monitor view**: live readout of all 512 channels
 
 ### Low Priority
 - [ ] **Undo/Redo system**: track showfile modifications for undo support
 - [ ] **Showfile templates**: save current state as template for new shows
 - [ ] **MIDI/OSC control**: external controller support
 - [ ] **Dark/Light theme toggle**
-- [ ] **Tablet landscape optimization**: current layout assumes landscape, but could be improved for portrait/split-screen
-- [ ] **Backup to cloud**: Google Drive / Dropbox integration for showfiles
-- [ ] **Multiple device management**: store configurations for multiple ESP32 controllers
+- [ ] **Tablet landscape optimization**: improve for portrait/split-screen
+- [ ] **Backup to cloud**: Google Drive / Dropbox integration
+- [ ] **Multiple device management**: store configs for multiple ESP32 controllers
 
 ### New Features
 - [ ] **Nuova icona app**: tema viola/ciano/bianco/nero
 - [ ] **Splashscreen**: stesso stile dell'icona
 
-### Known Issues (Deprecati/Risolti)
-- [x] ~~Color wheel HSV still uses full canvas size~~ (Risolto: gradiente corretto, rimossi aspectRatio conflittuali)
-- [ ] **No loading indicator** when loading a showfile from disk (could freeze UI briefly for large shows)
+### Known Issues
+- [ ] **No loading indicator** when loading a showfile from disk (could freeze UI briefly)
 - [ ] **No confirmation dialog** before deleting a cue (immediate deletion with ✕)

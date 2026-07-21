@@ -68,6 +68,7 @@ fun FaderScreen(viewModel: MainViewModel) {
     val availableShows by viewModel.availableShows.collectAsState()
     val isConnected by viewModel.isControllerConnected.collectAsState()
     val grandMasterValue by viewModel.grandMaster.collectAsState()
+    val isBlackout by viewModel.isBlackout.collectAsState()
     val backupStatus by viewModel.backupStatus.collectAsState()
 
     // --- LAUNCHER PER BACKUP ---
@@ -247,20 +248,13 @@ fun FaderScreen(viewModel: MainViewModel) {
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
-                    onClick = {
-                        if (grandMasterValue > 0f) {
-                            previousMasterValue = grandMasterValue
-                            viewModel.setGrandMaster(0f)
-                        } else {
-                            viewModel.setGrandMaster(if (previousMasterValue > 0f) previousMasterValue else 100f)
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = if (grandMasterValue == 0f) colorCyan else colorDisconnected),
+                    onClick = { viewModel.toggleBlackout() },
+                    colors = ButtonDefaults.buttonColors(containerColor = if (isBlackout) colorCyan else colorDisconnected),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth().height(55.dp),
                     contentPadding = PaddingValues(0.dp)
                 ) {
-                    Text(text = "BLACK\nOUT", color = if (grandMasterValue == 0f) colorBackground else Color.White, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    Text(text = "BLACK\nOUT", color = if (isBlackout) colorBackground else Color.White, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
             }
 

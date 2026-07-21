@@ -72,6 +72,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _grandMaster = MutableStateFlow(100f)
     val grandMaster: StateFlow<Float> = _grandMaster.asStateFlow()
 
+    private val _isBlackout = MutableStateFlow(false)
+    val isBlackout: StateFlow<Boolean> = _isBlackout.asStateFlow()
+
     private val _availableShows = MutableStateFlow<List<String>>(emptyList())
     val availableShows: StateFlow<List<String>> = _availableShows.asStateFlow()
 
@@ -440,6 +443,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // Aggiorniamo IMMEDIATAMENTE il buffer del servizio senza rate-limiting qui.
         // Sarà il loop del servizio a gestire l'invio costante a 25fps.
         artNetService?.dmxData?.set(ch, v)
+    }
+
+    fun toggleBlackout() {
+        _isBlackout.value = !_isBlackout.value
+        artNetService?.isBlackoutMode = _isBlackout.value
     }
 
     fun setGrandMaster(v: Float) {

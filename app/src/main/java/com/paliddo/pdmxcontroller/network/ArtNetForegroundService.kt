@@ -39,6 +39,7 @@ class ArtNetForegroundService : Service() {
     private var universe: Int = 0
     private var isConnectionEnabled: Boolean = true
     var grandMasterValue: Float = 100f
+    var isBlackoutMode: Boolean = false
 
     // Indirizzi DMX assoluti dei Dimmer per applicazione Master
     private val dimmerAddresses = mutableSetOf<Int>()
@@ -216,20 +217,25 @@ class ArtNetForegroundService : Service() {
                 }
                 
                 while (isActive && isConnectionEnabled) {
-                    // Applichiamo il Grand Master ai canali dimmer prima di inviare
-                    val outputData = dmxData.copyOf()
-                    val multiplier = grandMasterValue / 100f
-                    
-                    synchronized(dimmerAddresses) {
-                        for (addr in dimmerAddresses) {
-                            if (addr in outputData.indices) {
-                                val nominalValue = outputData[addr].toInt() and 0xFF
-                                outputData[addr] = (nominalValue * multiplier).toInt().toByte()
+                    // BLACKOUT: forza tutti i 512 canali a 0
+                    if (isBlackoutMode) {
+                        artNetService.sendArtDmx(targetIp, universe, ByteArray(512), port)
+                    } else {
+                        // Applichiamo il Grand Master ai canali dimmer prima di inviare
+                        val outputData = dmxData.copyOf()
+                        val multiplier = grandMasterValue / 100f
+                        
+                        synchronized(dimmerAddresses) {
+                            for (addr in dimmerAddresses) {
+                                if (addr in outputData.indices) {
+                                    val nominalValue = outputData[addr].toInt() and 0xFF
+                                    outputData[addr] = (nominalValue * multiplier).toInt().toByte()
+                                }
                             }
                         }
+                        
+                        artNetService.sendArtDmx(targetIp, universe, outputData, port)
                     }
-                    
-                    artNetService.sendArtDmx(targetIp, universe, outputData, port)
                     delay(33) // Stream stabile a ~30Hz (1000ms / 33ms = ~30fps)
                 }
             }

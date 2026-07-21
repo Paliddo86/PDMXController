@@ -601,9 +601,9 @@ fun FaderScreen(viewModel: MainViewModel) {
                 } else {
                     // VISTA WORKSPACE
                     Row(modifier = Modifier.fillMaxSize()) {
-                        // Colonna centrale (sempre visibile): fixture, gruppi, controlli
-                        Column(modifier = Modifier.weight(if (isCueEditorOpen && !isLiveMode) 0.6f else 0.65f).fillMaxHeight()) {
-                            if (isLiveMode) {
+                        if (isLiveMode) {
+                            // --- LIVE MODE: griglia cue cards (centrale) + lista cue + GO/STOP (destra) ---
+                            Column(modifier = Modifier.weight(0.6f).fillMaxHeight()) {
                                 Box(modifier = Modifier.fillMaxSize().background(colorSurface, shape = RoundedCornerShape(8.dp)).padding(10.dp)) {
                                     LazyVerticalGrid(columns = GridCells.Adaptive(minSize = 110.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                         gridItemsIndexed(currentScene.cueList) { idx, cue ->
@@ -617,8 +617,39 @@ fun FaderScreen(viewModel: MainViewModel) {
                                         }
                                     }
                                 }
-                            } else {
-                                Text(text = "GRUPPI SALVATI:", color = colorTextPrimary.copy(0.5f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            // Colonna destra: lista cue + GO/STOP (sempre in LIVE mode)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(0.35f).fillMaxHeight().background(Color(0xFF11141A), shape = RoundedCornerShape(8.dp)).padding(10.dp)) {
+                                Text("CUE LIST", color = colorPurple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Box(modifier = Modifier.weight(1f).fillMaxWidth().border(1.dp, colorSurfaceAccent, RoundedCornerShape(4.dp)).padding(4.dp)) {
+                                    LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        itemsIndexed(currentScene.cueList) { index, cue ->
+                                            val isSelected = index == currentCueIndex
+                                            val isActive = index == runningCueIndex
+                                            val bgColor = when { isActive && isSelected -> colorGreenLive.copy(0.4f); isActive -> colorGreenLive.copy(0.2f); isSelected -> colorPurple.copy(0.4f); else -> Color.Transparent }
+                                            val textColor = when { isActive -> colorGreenLive; isSelected -> colorCyan; else -> colorTextPrimary }
+                                            Row(modifier = Modifier.fillMaxWidth().background(bgColor, shape = RoundedCornerShape(4.dp)).border(width = 1.dp, color = if (isSelected) colorCyan.copy(0.5f) else Color.Transparent, shape = RoundedCornerShape(4.dp)).clickable { if (isSingleModeEnabled) viewModel.selectCueManually(index) else viewModel.triggerFadeToCue(index) }.padding(8.dp)) {
+                                                Text(text = "${cue.number}: ${cue.name}", color = textColor, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                                            }
+                                        }
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Button(onClick = { viewModel.toggleSingleMode() }, modifier = Modifier.weight(0.5f).height(38.dp), colors = ButtonDefaults.buttonColors(containerColor = if (isSingleModeEnabled) colorPurple else colorSurfaceAccent), shape = RoundedCornerShape(4.dp)) { Text(if (isSingleModeEnabled) "🎯 SINGLE" else "⏭️ NEXT", fontSize = 9.sp) }
+                                        Button(onClick = { viewModel.toggleLoop() }, modifier = Modifier.weight(0.5f).height(38.dp), colors = ButtonDefaults.buttonColors(containerColor = if (isLoopEnabled) colorCyan else colorSurfaceAccent), shape = RoundedCornerShape(4.dp)) { Text("AUTOLOOP", fontSize = 9.sp) }
+                                    }
+                                    val isRunning by viewModel.isSequenceRunning.collectAsState()
+                                    Button(onClick = { viewModel.handleGoStopAction() }, modifier = Modifier.fillMaxWidth().height(55.dp), colors = ButtonDefaults.buttonColors(containerColor = if (isRunning) colorDisconnected else if (isSingleModeEnabled) colorCyan else colorPurple), shape = RoundedCornerShape(6.dp)) { Text(if (isRunning) "STOP" else if (isSingleModeEnabled) "GO (SEL)" else "GO", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold) }
+                                }
+                            }
+                        } else {
+                            // --- EDIT MODE: fixture, gruppi, controlli (centrale) ---
+                            Column(modifier = Modifier.weight(if (isCueEditorOpen) 0.6f else 0.65f).fillMaxHeight()) {
+                                Text("GRUPPI SALVATI:", color = colorTextPrimary.copy(0.5f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 LazyRow(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     itemsIndexed(currentShow.fixtureGroups) { _, grp ->
                                         Box(modifier = Modifier.background(if (activeGroupId == grp.id) colorPurple.copy(0.4f) else colorSurfaceAccent, shape = RoundedCornerShape(4.dp)).border(1.dp, if (activeGroupId == grp.id) colorCyan else colorPurple.copy(0.5f), shape = RoundedCornerShape(4.dp)).clickable { selectedFixtureIds.clear(); selectedFixtureIds.addAll(grp.fixtureIds); activeGroupId = grp.id }.padding(horizontal = 12.dp, vertical = 8.dp)) {
@@ -717,93 +748,93 @@ fun FaderScreen(viewModel: MainViewModel) {
                                     }
                                 }
                             }
-                        }
 
-                        // Pannello CUE unificato (solo se EDIT mode e isCueEditorOpen)
-                        if (!isLiveMode && isCueEditorOpen) {
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(0.35f).fillMaxHeight().background(Color(0xFF11141A), shape = RoundedCornerShape(8.dp)).padding(10.dp)) {
-                                // --- SEZIONE 1: RECORD CUE ---
-                                Text("EDIT CUE", color = colorPurple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    OutlinedTextField(value = cueNumberInput, onValueChange = { cueNumberInput = it }, label = { Text("Num", fontSize = 9.sp) }, textStyle = TextStyle(color = colorTextPrimary, fontSize = 11.sp), colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = colorSurfaceAccent, focusedBorderColor = colorPurple), modifier = Modifier.weight(0.3f).height(50.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-                                    OutlinedTextField(value = cueNameInput, onValueChange = { cueNameInput = it }, label = { Text("Nome", fontSize = 9.sp) }, textStyle = TextStyle(color = colorTextPrimary, fontSize = 11.sp), colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = colorSurfaceAccent, focusedBorderColor = colorPurple), modifier = Modifier.weight(0.7f).height(50.dp), singleLine = true)
-                                }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Button(onClick = {
-                                        val num = cueNumberInput.text.toFloatOrNull() ?: 0f
-                                        val fade = cueFadeInput.text.toFloatOrNull() ?: 0.0f
-                                        val finalName = if (cueNameInput.text.isEmpty()) "CUE $num" else cueNameInput.text
-                                        viewModel.recordCue(num, finalName, fade)
-                                    }, modifier = Modifier.weight(1f).height(36.dp), colors = ButtonDefaults.buttonColors(containerColor = colorPurple), contentPadding = PaddingValues(0.dp)) {
-                                        Text("🔴 RECORD", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            // Pannello CUE unificato (solo se EDIT mode e isCueEditorOpen)
+                            if (isCueEditorOpen) {
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(0.35f).fillMaxHeight().background(Color(0xFF11141A), shape = RoundedCornerShape(8.dp)).padding(10.dp)) {
+                                    // --- SEZIONE 1: RECORD CUE ---
+                                    Text("EDIT CUE", color = colorPurple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        OutlinedTextField(value = cueNumberInput, onValueChange = { cueNumberInput = it }, label = { Text("Num", fontSize = 9.sp) }, textStyle = TextStyle(color = colorTextPrimary, fontSize = 11.sp), colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = colorSurfaceAccent, focusedBorderColor = colorPurple), modifier = Modifier.weight(0.3f).height(50.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                                        OutlinedTextField(value = cueNameInput, onValueChange = { cueNameInput = it }, label = { Text("Nome", fontSize = 9.sp) }, textStyle = TextStyle(color = colorTextPrimary, fontSize = 11.sp), colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = colorSurfaceAccent, focusedBorderColor = colorPurple), modifier = Modifier.weight(0.7f).height(50.dp), singleLine = true)
                                     }
-                                    Button(onClick = {
-                                        val currentCue = currentScene.cueList.getOrNull(currentCueIndex)
-                                        currentCue?.let { viewModel.duplicateCue(it) }
-                                    }, modifier = Modifier.weight(0.6f).height(36.dp), colors = ButtonDefaults.buttonColors(containerColor = colorSurfaceAccent), enabled = currentCueIndex != -1, contentPadding = PaddingValues(0.dp)) {
-                                        Text("👯 DUPLICA", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-
-                                // --- SEZIONE 2: FADE (campo numerico) ---
-                                Spacer(modifier = Modifier.height(8.dp))
-                                OutlinedTextField(
-                                    value = cueFadeInput,
-                                    onValueChange = { cueFadeInput = it },
-                                    label = { Text("Fade (s)", fontSize = 9.sp) },
-                                    textStyle = TextStyle(color = colorTextPrimary, fontSize = 11.sp),
-                                    colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = colorSurfaceAccent, focusedBorderColor = colorCyan),
-                                    modifier = Modifier.fillMaxWidth().height(50.dp),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                    singleLine = true,
-                                    trailingIcon = {
-                                        Text("sec", color = colorTextPrimary.copy(0.4f), fontSize = 10.sp)
-                                    }
-                                )
-                                HorizontalDivider(color = colorSurfaceAccent, thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
-
-                                // --- SEZIONE 3: SCENA E CUE LIST ---
-                                Row(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                    Box {
-                                        Text(text = "SCENA: ${currentScene.name} ▾", color = colorPurple, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { sceneMenuExpanded = true })
-                                        DropdownMenu(expanded = sceneMenuExpanded, onDismissRequest = { sceneMenuExpanded = false }, modifier = Modifier.background(colorSurface)) {
-                                            currentShow.scenes.forEachIndexed { idx, scene ->
-                                                DropdownMenuItem(
-                                                    text = { Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(scene.name, color = colorTextPrimary, modifier = Modifier.weight(1f)); if (currentShow.scenes.size > 1) { Text("🗑", color = colorDisconnected, modifier = Modifier.clickable { sceneToDeleteIndex = idx; sceneMenuExpanded = false }.padding(8.dp)) } } },
-                                                    onClick = { viewModel.selectScene(idx); sceneMenuExpanded = false }
-                                                )
-                                            }
-                                            HorizontalDivider(color = colorSurfaceAccent)
-                                            DropdownMenuItem(text = { Text("+ Nuova Scena", color = colorCyan) }, onClick = { createSceneDialogOpened = true; sceneMenuExpanded = false })
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Button(onClick = {
+                                            val num = cueNumberInput.text.toFloatOrNull() ?: 0f
+                                            val fade = cueFadeInput.text.toFloatOrNull() ?: 0.0f
+                                            val finalName = if (cueNameInput.text.isEmpty()) "CUE $num" else cueNameInput.text
+                                            viewModel.recordCue(num, finalName, fade)
+                                        }, modifier = Modifier.weight(1f).height(36.dp), colors = ButtonDefaults.buttonColors(containerColor = colorPurple), contentPadding = PaddingValues(0.dp)) {
+                                            Text("🔴 RECORD", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                        Button(onClick = {
+                                            val currentCue = currentScene.cueList.getOrNull(currentCueIndex)
+                                            currentCue?.let { viewModel.duplicateCue(it) }
+                                        }, modifier = Modifier.weight(0.6f).height(36.dp), colors = ButtonDefaults.buttonColors(containerColor = colorSurfaceAccent), enabled = currentCueIndex != -1, contentPadding = PaddingValues(0.dp)) {
+                                            Text("👯 DUPLICA", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                         }
                                     }
-                                }
 
-                                Box(modifier = Modifier.weight(1f).fillMaxWidth().border(1.dp, colorSurfaceAccent, RoundedCornerShape(4.dp)).padding(4.dp)) {
-                                    LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        itemsIndexed(currentScene.cueList) { index, cue ->
-                                            val isSelected = index == currentCueIndex
-                                            val isActive = index == runningCueIndex
-                                            val bgColor = when { isActive && isSelected -> colorGreenLive.copy(0.4f); isActive -> colorGreenLive.copy(0.2f); isSelected -> colorPurple.copy(0.4f); else -> Color.Transparent }
-                                            val textColor = when { isActive -> colorGreenLive; isSelected -> colorCyan; else -> colorTextPrimary }
-                                            Row(modifier = Modifier.fillMaxWidth().background(bgColor, shape = RoundedCornerShape(4.dp)).border(width = 1.dp, color = if (isSelected) colorCyan.copy(0.5f) else Color.Transparent, shape = RoundedCornerShape(4.dp)).clickable { if (isSingleModeEnabled) viewModel.selectCueManually(index) else viewModel.triggerFadeToCue(index) }.padding(8.dp)) {
-                                                Text(text = "${cue.number}: ${cue.name}", color = textColor, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                                                Text("✕", color = colorDisconnected, modifier = Modifier.clickable { viewModel.deleteCue(index) })
+                                    // --- SEZIONE 2: FADE (campo numerico) ---
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    OutlinedTextField(
+                                        value = cueFadeInput,
+                                        onValueChange = { cueFadeInput = it },
+                                        label = { Text("Fade (s)", fontSize = 9.sp) },
+                                        textStyle = TextStyle(color = colorTextPrimary, fontSize = 11.sp),
+                                        colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = colorSurfaceAccent, focusedBorderColor = colorCyan),
+                                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                        singleLine = true,
+                                        trailingIcon = {
+                                            Text("sec", color = colorTextPrimary.copy(0.4f), fontSize = 10.sp)
+                                        }
+                                    )
+                                    HorizontalDivider(color = colorSurfaceAccent, thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
+
+                                    // --- SEZIONE 3: SCENA E CUE LIST ---
+                                    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                        Box {
+                                            Text(text = "SCENA: ${currentScene.name} ▾", color = colorPurple, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { sceneMenuExpanded = true })
+                                            DropdownMenu(expanded = sceneMenuExpanded, onDismissRequest = { sceneMenuExpanded = false }, modifier = Modifier.background(colorSurface)) {
+                                                currentShow.scenes.forEachIndexed { idx, scene ->
+                                                    DropdownMenuItem(
+                                                        text = { Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(scene.name, color = colorTextPrimary, modifier = Modifier.weight(1f)); if (currentShow.scenes.size > 1) { Text("🗑", color = colorDisconnected, modifier = Modifier.clickable { sceneToDeleteIndex = idx; sceneMenuExpanded = false }.padding(8.dp)) } } },
+                                                        onClick = { viewModel.selectScene(idx); sceneMenuExpanded = false }
+                                                    )
+                                                }
+                                                HorizontalDivider(color = colorSurfaceAccent)
+                                                DropdownMenuItem(text = { Text("+ Nuova Scena", color = colorCyan) }, onClick = { createSceneDialogOpened = true; sceneMenuExpanded = false })
                                             }
                                         }
                                     }
-                                }
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Button(onClick = { viewModel.toggleSingleMode() }, modifier = Modifier.weight(0.5f).height(38.dp), colors = ButtonDefaults.buttonColors(containerColor = if (isSingleModeEnabled) colorPurple else colorSurfaceAccent), shape = RoundedCornerShape(4.dp)) { Text(if (isSingleModeEnabled) "🎯 SINGLE" else "⏭️ NEXT", fontSize = 9.sp) }
-                                        Button(onClick = { viewModel.toggleLoop() }, modifier = Modifier.weight(0.5f).height(38.dp), colors = ButtonDefaults.buttonColors(containerColor = if (isLoopEnabled) colorCyan else colorSurfaceAccent), shape = RoundedCornerShape(4.dp)) { Text("AUTOLOOP", fontSize = 9.sp) }
+
+                                    Box(modifier = Modifier.weight(1f).fillMaxWidth().border(1.dp, colorSurfaceAccent, RoundedCornerShape(4.dp)).padding(4.dp)) {
+                                        LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            itemsIndexed(currentScene.cueList) { index, cue ->
+                                                val isSelected = index == currentCueIndex
+                                                val isActive = index == runningCueIndex
+                                                val bgColor = when { isActive && isSelected -> colorGreenLive.copy(0.4f); isActive -> colorGreenLive.copy(0.2f); isSelected -> colorPurple.copy(0.4f); else -> Color.Transparent }
+                                                val textColor = when { isActive -> colorGreenLive; isSelected -> colorCyan; else -> colorTextPrimary }
+                                                Row(modifier = Modifier.fillMaxWidth().background(bgColor, shape = RoundedCornerShape(4.dp)).border(width = 1.dp, color = if (isSelected) colorCyan.copy(0.5f) else Color.Transparent, shape = RoundedCornerShape(4.dp)).clickable { if (isSingleModeEnabled) viewModel.selectCueManually(index) else viewModel.triggerFadeToCue(index) }.padding(8.dp)) {
+                                                    Text(text = "${cue.number}: ${cue.name}", color = textColor, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                                                    Text("✕", color = colorDisconnected, modifier = Modifier.clickable { viewModel.deleteCue(index) })
+                                                }
+                                            }
+                                        }
                                     }
-                                    val isRunning by viewModel.isSequenceRunning.collectAsState()
-                                    Button(onClick = { viewModel.handleGoStopAction() }, modifier = Modifier.fillMaxWidth().height(55.dp), colors = ButtonDefaults.buttonColors(containerColor = if (isRunning) colorDisconnected else if (isSingleModeEnabled) colorCyan else colorPurple), shape = RoundedCornerShape(6.dp)) { Text(if (isRunning) "STOP" else if (isSingleModeEnabled) "GO (SEL)" else "GO", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold) }
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Button(onClick = { viewModel.toggleSingleMode() }, modifier = Modifier.weight(0.5f).height(38.dp), colors = ButtonDefaults.buttonColors(containerColor = if (isSingleModeEnabled) colorPurple else colorSurfaceAccent), shape = RoundedCornerShape(4.dp)) { Text(if (isSingleModeEnabled) "🎯 SINGLE" else "⏭️ NEXT", fontSize = 9.sp) }
+                                            Button(onClick = { viewModel.toggleLoop() }, modifier = Modifier.weight(0.5f).height(38.dp), colors = ButtonDefaults.buttonColors(containerColor = if (isLoopEnabled) colorCyan else colorSurfaceAccent), shape = RoundedCornerShape(4.dp)) { Text("AUTOLOOP", fontSize = 9.sp) }
+                                        }
+                                        val isRunning by viewModel.isSequenceRunning.collectAsState()
+                                        Button(onClick = { viewModel.handleGoStopAction() }, modifier = Modifier.fillMaxWidth().height(55.dp), colors = ButtonDefaults.buttonColors(containerColor = if (isRunning) colorDisconnected else if (isSingleModeEnabled) colorCyan else colorPurple), shape = RoundedCornerShape(6.dp)) { Text(if (isRunning) "STOP" else if (isSingleModeEnabled) "GO (SEL)" else "GO", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold) }
+                                    }
                                 }
                             }
                         }

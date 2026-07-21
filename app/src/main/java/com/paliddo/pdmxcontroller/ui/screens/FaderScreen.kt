@@ -934,8 +934,8 @@ fun ColorControlSection(
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
-            // COLOR PICKER (CANVAS)
-            Box(modifier = Modifier.weight(0.25f).aspectRatio(0.7f).padding(8.dp)) {
+            // COLOR PICKER (CANVAS) — dimensioni stabili, eredita altezza dalla Row
+            Box(modifier = Modifier.fillMaxWidth(0.35f).padding(6.dp)) {
                 ColorWheel(initialColor = currentColor) { color ->
                     onColorChange(color)
                     viewModel.applyColorToSelected(selectedIds, (color.red * 255).toInt(), (color.green * 255).toInt(), (color.blue * 255).toInt())
@@ -943,7 +943,7 @@ fun ColorControlSection(
             }
 
             // INFO E SALVATAGGIO
-            Column(modifier = Modifier.weight(0.5f).padding(8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(modifier = Modifier.weight(0.65f).padding(8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("COLORE ATTUALE", color = colorCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1056,8 +1056,6 @@ fun ColorControlSection(
 
 @Composable
 fun ColorWheel(initialColor: Color, onColorSelected: (Color) -> Unit) {
-    var canvasSize by remember { mutableStateOf(Offset.Zero) }
-    
     val hsv = remember(initialColor) {
         val floatArray = FloatArray(3)
         android.graphics.Color.colorToHSV(initialColor.toArgb(), floatArray)
@@ -1074,6 +1072,7 @@ fun ColorWheel(initialColor: Color, onColorSelected: (Color) -> Unit) {
                 val radius = min(size.width.toFloat(), size.height.toFloat()) / 2
                 
                 if (distance <= radius) {
+                    // atan2 in screen coordinates: 0° at +X (right), +° clockwise due to inverted Y
                     val angle = atan2(touch.y - center.y, touch.x - center.x) * (180 / PI).toFloat()
                     val hue = (angle + 360) % 360
                     val saturation = (distance / radius).coerceIn(0f, 1f)
@@ -1081,13 +1080,14 @@ fun ColorWheel(initialColor: Color, onColorSelected: (Color) -> Unit) {
                 }
             }
         }) {
-        canvasSize = Offset(size.width, size.height)
         val radius = min(size.width, size.height) / 2
         val center = Offset(size.width / 2, size.height / 2)
 
+        // Gradiente in senso orario corrispondente alla ruota HSV standard:
+        // 0°=Rosso, 60°=Giallo, 120°=Verde, 180°=Ciano, 240°=Blu, 300°=Magenta
         drawCircle(
             brush = Brush.sweepGradient(
-                colors = listOf(Color.Red, Color.Magenta, Color.Blue, Color.Cyan, Color.Green, Color.Yellow, Color.Red),
+                colors = listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red),
                 center = center
             ),
             radius = radius
@@ -1101,7 +1101,8 @@ fun ColorWheel(initialColor: Color, onColorSelected: (Color) -> Unit) {
             radius = radius
         )
 
-        // Calcolo posizione cursore basata su initialColor (HSV)
+        // Cursore: posizione calcolata dall'HSV del colore corrente
+        // cos/sin mappano l'angolo HSV in coordinate schermo (Y invertita)
         val angleRad = (hsv[0] * PI / 180f).toFloat()
         val dist = hsv[1] * radius
         val cursorOffset = Offset(

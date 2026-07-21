@@ -636,19 +636,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val show = _currentShow.value
         val allProfiles = getAllAvailableProfiles()
         
-        // Calcolo Bianco (W) per fari RGBW
-        val w = minOf(r, minOf(g, b))
-        
         fixtureIds.forEach { fid ->
             val inst = show.fixtureInstances.find { it.id == fid } ?: return@forEach
             val profile = allProfiles.find { it.id == inst.profileId } ?: return@forEach
             
+            // Controlla se questo profilo ha un canale WHITE dedicato
+            val hasWhiteChannel = profile.channels.any { it.type == ChannelType.COLOR_W }
+            
+            // Calcolo del bianco: se esiste canale W, lo sottraiamo da R, G, B
+            val w = if (hasWhiteChannel) minOf(r, minOf(g, b)) else 0
+            val rAdjusted = (r - w).coerceIn(0, 255)
+            val gAdjusted = (g - w).coerceIn(0, 255)
+            val bAdjusted = (b - w).coerceIn(0, 255)
+            
             profile.channels.forEach { ch ->
                 val addr = inst.startAddress - 1 + ch.offset
                 when (ch.type) {
-                    ChannelType.COLOR_R -> updateDmxChannel(addr, r.toByte())
-                    ChannelType.COLOR_G -> updateDmxChannel(addr, g.toByte())
-                    ChannelType.COLOR_B -> updateDmxChannel(addr, b.toByte())
+                    ChannelType.COLOR_R -> updateDmxChannel(addr, rAdjusted.toByte())
+                    ChannelType.COLOR_G -> updateDmxChannel(addr, gAdjusted.toByte())
+                    ChannelType.COLOR_B -> updateDmxChannel(addr, bAdjusted.toByte())
                     ChannelType.COLOR_W -> updateDmxChannel(addr, w.toByte())
                     else -> {}
                 }

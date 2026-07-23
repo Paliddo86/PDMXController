@@ -53,6 +53,10 @@ jobs:
             ./gradlew assembleRelease
           fi
 
+      - name: Rename APK
+        run: |
+          mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/PDMXController-${{ github.ref_name }}.apk
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         if: success()
@@ -60,6 +64,6 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
           files: |
-            app/build/outputs/apk/release/app-release.apk
+            app/build/outputs/apk/release/PDMXController-${{ github.ref_name }}.apk
           generate_release_notes: true
           make_latest: true

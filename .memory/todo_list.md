@@ -46,6 +46,18 @@
 - [x] Splashscreen animato con icona, titolo e crediti
 - [x] Nuova icona app vettoriale (tema viola/ciano/bianco/nero)
 
+### About Screen & Auto-update
+- [x] Schermata About completa con icona app, nome, versione, sviluppatore
+- [x] Link cliccabile al repository GitHub
+- [x] Pulsante "Cerca aggiornamenti" che interroga le GitHub Releases
+- [x] Dialog con risultato (aggiornamento disponibile / già all'ultima versione / errore)
+- [x] Apertura browser alla pagina di release se aggiornamento disponibile
+
+### GitHub Release Workflow
+- [x] Workflow `.github/workflows/release.yml` per build automatica su tag v*
+- [x] Supporto keystore opzionale via GitHub Secrets
+- [x] Upload APK come asset della release
+
 ### Bug Fixes
 - [x] animateItemPlacement compilation error
 - [x] Coroutine cancellation in ConnectionManager
@@ -64,16 +76,13 @@
 ### Medium Priority
 - [ ] **Show import merge**: when importing a show, if a profile with the same ID already exists in the user library, show a diff/merge dialog
 - [ ] **Multiple universe support**: current Art-Net implementation only handles universe 0
-- [ ] **DMX monitor view**: live readout of all 512 channels
 
 ### Low Priority
 - [ ] **Undo/Redo system**: track showfile modifications for undo support
 - [ ] **Showfile templates**: save current state as template for new shows
-- [ ] **MIDI/OSC control**: external controller support
 - [ ] **Dark/Light theme toggle**
 - [ ] **Tablet landscape optimization**: improve for portrait/split-screen
 - [ ] **Backup to cloud**: Google Drive / Dropbox integration
-- [ ] **Multiple device management**: store configs for multiple ESP32 controllers
 
 ### Known Issues
 - [ ] **No loading indicator** when loading a showfile from disk (could freeze UI briefly)

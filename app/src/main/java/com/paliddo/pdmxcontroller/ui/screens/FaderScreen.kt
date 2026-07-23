@@ -1,6 +1,14 @@
 package com.paliddo.pdmxcontroller.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
+import com.paliddo.pdmxcontroller.BuildConfig
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.URL
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
@@ -594,7 +602,7 @@ fun FaderScreen(viewModel: MainViewModel) {
                                         }
                                     }
                                 }
-                                "ABOUT" -> Text("pdmxcontroller v1.0.0", color = colorCyan)
+                                "ABOUT" -> AboutContent(context = context, colorSurface = colorSurface, colorSurfaceAccent = colorSurfaceAccent, colorTextPrimary = colorTextPrimary, colorPurple = colorPurple, colorCyan = colorCyan, colorBackground = colorBackground)
                             }
                         }
                     }
@@ -622,6 +630,48 @@ fun FaderScreen(viewModel: MainViewModel) {
                             // Colonna destra: lista cue + GO/STOP (sempre in LIVE mode)
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(0.35f).fillMaxHeight().background(Color(0xFF11141A), shape = RoundedCornerShape(8.dp)).padding(10.dp)) {
+                                // Selettore scena in Live mode
+                                var liveSceneMenuExpanded by remember { mutableStateOf(false) }
+                                Box {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(colorPurple.copy(0.2f), RoundedCornerShape(6.dp))
+                                            .clickable { liveSceneMenuExpanded = true }
+                                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "SCENA: ${currentScene.name} ▾",
+                                            color = colorPurple,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    DropdownMenu(
+                                        expanded = liveSceneMenuExpanded,
+                                        onDismissRequest = { liveSceneMenuExpanded = false },
+                                        modifier = Modifier.background(colorSurface)
+                                    ) {
+                                        currentShow.scenes.forEachIndexed { idx, scene ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text(
+                                                        scene.name,
+                                                        color = if (idx == activeSceneIndex) colorCyan else colorTextPrimary,
+                                                        fontWeight = if (idx == activeSceneIndex) FontWeight.Bold else FontWeight.Normal
+                                                    )
+                                                },
+                                                onClick = {
+                                                    viewModel.selectScene(idx)
+                                                    liveSceneMenuExpanded = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
                                 Text("CUE LIST", color = colorPurple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                 Box(modifier = Modifier.weight(1f).fillMaxWidth().border(1.dp, colorSurfaceAccent, RoundedCornerShape(4.dp)).padding(4.dp)) {
                                     LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1387,6 +1437,290 @@ fun FaderControlSection(viewModel: MainViewModel, selectedIds: List<String>, sho
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AboutContent(
+    context: android.content.Context,
+    colorSurface: Color,
+    colorSurfaceAccent: Color,
+    colorTextPrimary: Color,
+    colorPurple: Color,
+    colorCyan: Color,
+    colorBackground: Color
+) {
+    val appVersion = BuildConfig.VERSION_NAME
+    val appVersionCode = BuildConfig.VERSION_CODE
+    val githubUser = "Paliddo86"
+    val githubRepo = "PDMXController"
+    val githubApiUrl = "https://api.github.com/repos/$githubUser/$githubRepo/releases/latest"
+    val githubRepoUrl = "https://github.com/$githubUser/$githubRepo"
+
+    // Stato per l'update check
+    var updateCheckState by remember { mutableStateOf<UpdateCheckState>(UpdateCheckState.Idle) }
+
+    // Scope per coroutine
+    val scope = rememberCoroutineScope()
+
+    // Dialog per risultato aggiornamento
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    var updateDialogMessage by remember { mutableStateOf("") }
+    var updateUrl by remember { mutableStateOf("") }
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Icona app
+        Icon(
+            painter = androidx.compose.ui.res.painterResource(id = com.paliddo.pdmxcontroller.R.drawable.ic_launcher_foreground),
+            contentDescription = "PDMX Controller Logo",
+            tint = Color.Unspecified,
+            modifier = Modifier.size(100.dp)
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Nome app
+        Text(
+            text = "P-DMX CONTROLLER",
+            color = colorCyan,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.ExtraBold,
+            letterSpacing = 4.sp
+        )
+
+        // Versione
+        Text(
+            text = "Versione $appVersion (build $appVersionCode)",
+            color = colorTextPrimary.copy(alpha = 0.7f),
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium
+        )
+
+        // Divisore
+        Box(
+            modifier = Modifier
+                .width(80.dp)
+                .height(2.dp)
+                .background(colorCyan.copy(alpha = 0.4f))
+        )
+
+        // Info sviluppatore
+        Text(
+            text = "Sviluppato da",
+            color = colorTextPrimary.copy(alpha = 0.5f),
+            fontSize = 11.sp
+        )
+        Text(
+            text = "Paliddo (Luigi Pallante)",
+            color = colorTextPrimary,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // Link GitHub
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(githubRepoUrl))
+                    context.startActivity(intent)
+                }
+                .background(colorSurfaceAccent, RoundedCornerShape(8.dp))
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = "\uD83D\uDCC1", fontSize = 16.sp)
+            Text(
+                text = "github.com/$githubUser/$githubRepo",
+                color = colorCyan,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Icon(
+                imageVector = Icons.Default.OpenInNew,
+                contentDescription = null,
+                tint = colorCyan,
+                modifier = Modifier.size(14.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        // Pulsante Cerca aggiornamenti
+        Button(
+            onClick = {
+                updateCheckState = UpdateCheckState.Checking
+                scope.launch {
+                    val result = checkForUpdates(githubApiUrl, appVersion)
+                    updateCheckState = result
+                    when (result) {
+                        is UpdateCheckState.UpdateAvailable -> {
+                            updateDialogMessage = "Nuova versione ${result.latestVersion} disponibile!"
+                            updateUrl = result.releaseUrl
+                            showUpdateDialog = true
+                        }
+                        is UpdateCheckState.UpToDate -> {
+                            updateDialogMessage = "Sei già all'ultima versione ($appVersion)."
+                            showUpdateDialog = true
+                        }
+                        is UpdateCheckState.Error -> {
+                            updateDialogMessage = "Errore durante il controllo: ${result.message}"
+                            showUpdateDialog = true
+                        }
+                        else -> {}
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = when (updateCheckState) {
+                    is UpdateCheckState.Checking -> colorSurfaceAccent
+                    else -> colorPurple
+                }
+            ),
+            enabled = updateCheckState !is UpdateCheckState.Checking
+        ) {
+            if (updateCheckState is UpdateCheckState.Checking) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = colorCyan,
+                    strokeWidth = 2.dp
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("CONTROLLO IN CORSO...", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            } else {
+                Text("\uD83D\uDD0D CERCA AGGIORNAMENTI", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Copyright
+        Text(
+            text = "© ${java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)} Paliddo",
+            color = colorTextPrimary.copy(alpha = 0.3f),
+            fontSize = 10.sp
+        )
+        Text(
+            text = "Open source software - Licenza MIT",
+            color = colorTextPrimary.copy(alpha = 0.2f),
+            fontSize = 9.sp
+        )
+    }
+
+    // Dialog per risultato aggiornamento
+    if (showUpdateDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showUpdateDialog = false
+                updateCheckState = UpdateCheckState.Idle
+            },
+            containerColor = colorSurface,
+            title = {
+                Text(
+                    if (updateCheckState is UpdateCheckState.UpdateAvailable) "AGGIORNAMENTO DISPONIBILE" else "CONTROLLO AGGIORNAMENTI",
+                    color = if (updateCheckState is UpdateCheckState.UpdateAvailable) colorCyan else colorTextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(updateDialogMessage, color = colorTextPrimary)
+            },
+            confirmButton = {
+                if (updateCheckState is UpdateCheckState.UpdateAvailable) {
+                    Button(
+                        onClick = {
+                            showUpdateDialog = false
+                            updateCheckState = UpdateCheckState.Idle
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(updateUrl))
+                            context.startActivity(intent)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = colorCyan)
+                    ) {
+                        Text("SCARICA", color = colorBackground, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    Button(
+                        onClick = {
+                            showUpdateDialog = false
+                            updateCheckState = UpdateCheckState.Idle
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = colorPurple)
+                    ) {
+                        Text("OK", fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showUpdateDialog = false
+                        updateCheckState = UpdateCheckState.Idle
+                    }
+                ) {
+                    Text("CHIUDI", color = colorTextPrimary)
+                }
+            }
+        )
+    }
+}
+
+private sealed class UpdateCheckState {
+    data object Idle : UpdateCheckState()
+    data object Checking : UpdateCheckState()
+    data class UpdateAvailable(val latestVersion: String, val releaseUrl: String) : UpdateCheckState()
+    data object UpToDate : UpdateCheckState()
+    data class Error(val message: String) : UpdateCheckState()
+}
+
+private suspend fun checkForUpdates(apiUrl: String, currentVersion: String): UpdateCheckState {
+    return withContext(Dispatchers.IO) {
+        try {
+            val url = URL(apiUrl)
+            val connection = url.openConnection() as java.net.HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.setRequestProperty("Accept", "application/json")
+            connection.connectTimeout = 10000
+            connection.readTimeout = 10000
+
+            val responseCode = connection.responseCode
+            if (responseCode == 200) {
+                val responseText = connection.inputStream.bufferedReader().readText()
+                val json = JSONObject(responseText)
+                val latestTag = json.getString("tag_name") // es. "v1.0.1"
+                val releaseUrl = json.getString("html_url")
+
+                // Confronto versioni: rimuovi 'v' iniziale se presente
+                val remoteVer = latestTag.removePrefix("v")
+                val localVer = currentVersion.removePrefix("v")
+
+                if (remoteVer != localVer) {
+                    UpdateCheckState.UpdateAvailable(latestVersion = latestTag, releaseUrl = releaseUrl)
+                } else {
+                    UpdateCheckState.UpToDate
+                }
+            } else if (responseCode == 302 || responseCode == 301) {
+                // Redirect - segui
+                val redirectUrl = connection.getHeaderField("Location")
+                if (redirectUrl != null) {
+                    return@withContext checkForUpdates(redirectUrl, currentVersion)
+                }
+                UpdateCheckState.Error("Risposta inaspettata (redirect)")
+            } else {
+                UpdateCheckState.Error("Risposta HTTP $responseCode")
+            }
+        } catch (e: Exception) {
+            UpdateCheckState.Error(e.message ?: "Errore sconosciuto")
         }
     }
 }

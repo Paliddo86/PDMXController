@@ -299,11 +299,11 @@ fun FaderScreen(viewModel: MainViewModel) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (!isLiveMode && !isSettingsOpen) {
                             if (!isLiveMode) {
-                                Button(onClick = { isCueEditorOpen = !isCueEditorOpen }, colors = ButtonDefaults.buttonColors(containerColor = if (isCueEditorOpen) colorPurple else colorSurfaceAccent), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp), modifier = Modifier.border(1.dp, if (isCueEditorOpen) Color.Transparent else colorPurple.copy(0.5f), RoundedCornerShape(50))) {
+                                Button(onClick = { isCueEditorOpen = !isCueEditorOpen }, colors = ButtonDefaults.buttonColors(containerColor = if (isCueEditorOpen) colorPurple else colorSurfaceAccent), shape = RoundedCornerShape(50), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp), modifier = Modifier.border(1.dp, if (isCueEditorOpen) Color.Transparent else colorPurple.copy(0.5f), RoundedCornerShape(50))) {
                                     Text("🎬 CUE", color = colorTextPrimary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 }
                                 // Pulsante SALVA SHOW
-                                Button(onClick = { viewModel.saveCurrentShow() }, colors = ButtonDefaults.buttonColors(containerColor = colorGreenLive), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp), modifier = Modifier.border(1.dp, colorGreenLive, RoundedCornerShape(50))) {
+                                Button(onClick = { viewModel.saveCurrentShow() }, colors = ButtonDefaults.buttonColors(containerColor = colorGreenLive), shape = RoundedCornerShape(50), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp), modifier = Modifier.border(1.dp, colorGreenLive, RoundedCornerShape(50))) {
                                     Text("💾 SALVA", color = colorBackground, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
@@ -317,15 +317,15 @@ fun FaderScreen(viewModel: MainViewModel) {
                                     }
                                 }
                             }
-                            Button(onClick = { patchDialogOpened = true }, colors = ButtonDefaults.buttonColors(containerColor = colorSurfaceAccent), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp), modifier = Modifier.border(1.dp, colorCyan.copy(alpha = 0.5f), RoundedCornerShape(50))) {
+                            Button(onClick = { patchDialogOpened = true }, colors = ButtonDefaults.buttonColors(containerColor = colorSurfaceAccent), shape = RoundedCornerShape(50), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp), modifier = Modifier.border(1.dp, colorCyan.copy(alpha = 0.5f), RoundedCornerShape(50))) {
                                 Text("🛠 PATCH", color = colorTextPrimary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             }
                         }
-                        Button(onClick = { isSettingsOpen = !isSettingsOpen }, colors = ButtonDefaults.buttonColors(containerColor = if (isSettingsOpen) colorCyan else colorSurfaceAccent), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp), modifier = Modifier.border(1.dp, if (isSettingsOpen) Color.Transparent else colorCyan.copy(0.5f), RoundedCornerShape(50))) {
+                        Button(onClick = { isSettingsOpen = !isSettingsOpen }, colors = ButtonDefaults.buttonColors(containerColor = if (isSettingsOpen) colorCyan else colorSurfaceAccent), shape = RoundedCornerShape(50), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp), modifier = Modifier.border(1.dp, if (isSettingsOpen) Color.Transparent else colorCyan.copy(0.5f), RoundedCornerShape(50))) {
                             Text(if (isSettingsOpen) "✕ CHIUDI" else "⚙️ SETTINGS", color = if (isSettingsOpen) colorBackground else colorTextPrimary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         }
                         if (!isSettingsOpen) {
-                            Button(onClick = { viewModel.toggleLiveMode() }, colors = ButtonDefaults.buttonColors(containerColor = if (isLiveMode) colorGreenLive else colorSurfaceAccent), contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp), modifier = Modifier.border(1.dp, if (isLiveMode) Color.Transparent else colorPurple, RoundedCornerShape(50))) {
+                            Button(onClick = { viewModel.toggleLiveMode() }, colors = ButtonDefaults.buttonColors(containerColor = if (isLiveMode) colorGreenLive else colorSurfaceAccent), shape = RoundedCornerShape(50), contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp), modifier = Modifier.border(1.dp, if (isLiveMode) Color.Transparent else colorPurple, RoundedCornerShape(50))) {
                                 Text(if (isLiveMode) "🔒 LIVE" else "📝 EDIT", color = colorTextPrimary, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
                             }
                         }

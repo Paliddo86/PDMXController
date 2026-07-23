@@ -31,7 +31,7 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 --decode > keystore.jks
+            echo "$KEYSTORE_BASE64" | base64 --decode > app/keystore.jks
           fi
 
       - name: Build Release APK
@@ -42,7 +42,7 @@ jobs:
         run: |
           if [ -n "$KEYSTORE_PASSWORD" ]; then
             ./gradlew assembleRelease \
-              -Pandroid.injected.signing.store.file=keystore.jks \
+              -Pandroid.injected.signing.store.file=app/keystore.jks \
               -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
               -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
               -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
